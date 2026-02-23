@@ -8,10 +8,11 @@ Being an HID sensor, it is automatically detected by Windows, Linux and MacOS. A
 
 - Raspberry Pi RP2040 microcontroller board. 
 I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm) but really, any RP2040 board you can get hold of, for example the Raspberry Pi Pico.
-<img src="Images/rp2040-zero.png" alt="RP 2040-Zero Board" width="150" />
+<img src="Images/rp2040-zero.png" alt="RP 2040-Zero Board" width="125" />
 
-- TEMT6000 Light Sensor in a breakout board. Widely available from retail sources, including SparkFun and eBay. 
-<img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="150" />&nbsp;<img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="150" />
+- TEMT6000 Light Sensor in a breakout board. Widely available from retail sources, including SparkFun and eBay.
+  
+<img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="125" /> <img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="125" />
 
 - Soldering iron and headers.
 
@@ -22,7 +23,9 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
    - Please note that the Signal pin has to be connected to the chip's ADC, which can only read from GPIO pins 26, 27, 28 or 29.
    - **Important Note: The TEMT6000 sensor recommends an operating voltage of up to 5V, but you should supply at most 3.3 V to Vcc. This is because the ADC of the RP2040 is referenced to 3.3 V, and a higher voltage might damage the chip.**
    - Tidbit: Since the sensor draws at most about 0.5 mA, it is safe to power it from a GPIO Pin.
+
 <img src="Images/sensor-1.jpg" alt="Sensor Example 1" width="200" /> <img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="200" />
+
 2. While holding the bootsel button on the RP2040-Zero board, connect it to your PC. The device should appear as a USB mass storage device. Drag and drop the .uf2 file from the github releases to the mass storage device. If the device doesn't automatically reboot, simply unplug and re-plug it again.
 3. You can check the live sensor readings via `cat /sys/bus/iio/devices/iio\:device0/in_illuminance_raw`. Without a case, the bare sensor tops out at about 660 Lux. Which isn't very much, but it's more than plenty for meaningful automatic brightness adjustment.
 4. That's it, you're done! You may now set up [Clight](https://github.com/FedeDP/Clight) for automatic brightness adjustment, or write your own script that uses `ddcutil` to adjust display brightness.
