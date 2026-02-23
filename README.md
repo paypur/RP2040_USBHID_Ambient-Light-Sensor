@@ -10,7 +10,7 @@ Being an HID sensor, it is automatically detected by Windows, Linux and MacOS. A
 I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm) but really, any RP2040 board you can get hold of, for example the Raspberry Pi Pico.
 <img src="Images/rp2040-zero.png" alt="RP 2040-Zero Board" width="200" />
 - TEMT6000 Light Sensor in a breakout board. Widely available from retail sources, including SparkFun and eBay. 
-<img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="200" /> <img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="250" />
+<img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="150" /> <img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="150" />
 
 - Soldering iron and headers.
 
