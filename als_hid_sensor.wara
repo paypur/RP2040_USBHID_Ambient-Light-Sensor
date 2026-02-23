@@ -1,0 +1,37 @@
+[[applicationCollection]]
+usage = ['Sensors', 'Sensor']
+
+    [[applicationCollection.inputReport]]
+    id = 1
+    usageRelation = ['Sensors', 'Light: Ambient Light']
+
+        [[applicationCollection.inputReport.variableItem]]
+        usage = ['Sensors', 'Data Field: Illuminance']
+        sizeInBits = 16
+        logicalValueRange = 'maxUnSignedSizeRange'
+
+        [[applicationCollection.inputReport.logicalCollection]]
+        usage = ['Sensors', 'Event: Sensor Event']
+
+            [[applicationCollection.inputReport.logicalCollection.arrayItem]]
+            usageRange = ['Sensors', 'Sensor Event: Unknown', 'Sensor Event: Change Sensitivity']
+
+    [[applicationCollection.featureReport]]
+    id = 2
+    usageRelation = ['Sensors', 'Light: Ambient Light']
+
+        [[applicationCollection.featureReport.logicalCollection]]
+        usage = ['Sensors', 'Property: Reporting State']
+
+            [[applicationCollection.featureReport.logicalCollection.arrayItem]]
+            usageRange = ['Sensors', 'Reporting State: Report No Events', 'Reporting State: Report All Events']
+
+        [[applicationCollection.featureReport.logicalCollection]]
+        usage = ['Sensors', 'Property: Power State']
+
+            [[applicationCollection.featureReport.logicalCollection.arrayItem]]
+            usageRange = ['Sensors', 'Power State: Undefined', 'Power State: D4 Power Off']
+
+        [[applicationCollection.featureReport.variableItem]]
+        usage = ['Sensors', 'Property: Report Interval']
+        logicalValueRange = [0, 0xFFF]

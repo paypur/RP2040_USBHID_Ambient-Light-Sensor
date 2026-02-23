@@ -1,0 +1,40 @@
+# Build output
+/build/
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+*.dis
+*.lst
+*.o
+*.obj
+*.a
+*.so
+*.d
+*.dep
+*.log
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VSCode settings
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# MacOS
+.DS_Store
+
+# Backup files
+*~
+*.swp
+*.bak
+
+# Pico SDK (if cloned locally)
+pico-sdk/
