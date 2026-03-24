@@ -1,8 +1,10 @@
 # RP2040 USB HID Ambient Light Sensor
 
-Plug-and-Play USB HID Ambient Light Sensor (ALS) for the Raspberry Pi RP2040 microcontroller using the TinyUSB library. You can use this sensor with [Clight](https://github.com/FedeDP/Clight) to automatically control the brightness of your DDC-compliant monitor in Linux (Practially all DisplayPort and HDMI Monitors).
+Plug-and-Play USB HID Ambient Light Sensor (ALS) using a Raspberry Pi RP2040 microcontroller. 
 
-Being an HID sensor, it is automatically detected by Windows, Linux and MacOS. A simple user-space application or script should be able to extend the automatic brightness functionality to other operating systems, but as of now I'm unsure if such projects exist.
+You can use this sensor with [Clight](https://github.com/FedeDP/Clight) to automatically control the brightness of your DDC-compliant monitor in Linux (Practially all DisplayPort and HDMI Monitors).
+
+As an HID sensor, it is automatically detected by Windows, Linux and MacOS. A simple user-space application or script should be able to extend the automatic brightness functionality to other operating systems, but as of now I'm unsure if such projects exist.
 
 ### Requirements
 
