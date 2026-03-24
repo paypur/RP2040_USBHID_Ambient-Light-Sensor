@@ -29,11 +29,13 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
 
 <img src="Images/sensor-1.jpg" alt="Sensor Example 1" width="200" /> <img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="200" />
 
-2. While holding the bootsel button on the RP2040-Zero board, connect it to your PC. The device should appear as a USB mass storage device. Drag and drop the .uf2 file from the github releases to the mass storage device. If the device doesn't automatically reboot, simply unplug and re-plug it again.
+2. While holding the bootsel button on the RP2040-Zero board, connect it to your PC. The device should appear as a USB mass storage device. Drag and drop the .uf2 file from the [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) to the mass storage device. If the device doesn't automatically reboot, simply unplug and re-plug it again.
 3. You can check the live sensor readings via `cat /sys/bus/iio/devices/iio\:device0/in_illuminance_raw`. Without a case, the bare sensor tops out at about 660 Lux. Which isn't very much, but it's more than plenty for meaningful automatic brightness adjustment.
 4. That's it, you're done! You may now set up [Clight](https://github.com/FedeDP/Clight) for automatic brightness adjustment, or write your own script that uses `ddcutil` to adjust display brightness.
 
 ### Building
+
+You only need to follow this section if you are a developer or otherwise seeking to modify the firmware. For using the sensor, please download the pre-compiled firmware from [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) and follow the instructions in the previous section.
 
 **Option A: Build Script**
 
@@ -92,7 +94,7 @@ There are some yaks in need of shaving. If you have the time, expertise, and res
 
 2. It would be nice to have a 3D printed enclosure for ease of handling. If you have the abiliy to make some STL files I'll be glad to inclde them in this repo.
 
-### Notes
+## Advanced Internals and Notes
 
 A [USB HID device](https://learn.adafruit.com/customizing-usb-devices-in-circuitpython/hid-devices) announces its capabilities to your PC using an [HID descriptor](https://eleccelerator.com/tutorial-about-usb-hid-report-descriptors/). However, HID descriptors are fairly challenging to write manually. [Waratah](https://github.com/microsoft/hidtools) is a tool from Microsoft that can convert a high-level description of the reports to an HID descriptor. The HID descriptor for this project was generated using `als_hid_sensor.wara`, included in this repository.
 
@@ -114,6 +116,6 @@ TinyUSB uses an interrupt-driven architecture. Instead of the program constantly
 
 Nevetheless, building an HID device using CircuitPython has been an invaluable teaching tool. I decided to include my CircuitPython code in this repository to document the journey.
 
-### Credits
+## Credits
 
-Many thanks to the wonderful folks who built CircuitPython and TinyUSB.
+Many thanks to the wonderful folks who built CircuitPython, Clight and TinyUSB.
