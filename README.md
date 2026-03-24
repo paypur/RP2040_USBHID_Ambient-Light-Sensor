@@ -72,6 +72,16 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
 
 You can launch Clight from the command line using the `-d "iio:device0" ` flag to test if your monitor responds correctly to changing brightness. If you're happy, you may make the changes permanent by editing `/etc/clight/modules.conf.d/sensor.conf`.
 
+
+```bash
+$ sudo nano /etc/clight/modules.conf.d/sensor.conf
+sensor:
+{
+   devname = "iio:device0";
+};
+```
+
+
 ### Help Wanted
 
 There are some yaks in need of shaving. If you have the time, expertise, and resources, I'd sincerely appreciate your help here.
