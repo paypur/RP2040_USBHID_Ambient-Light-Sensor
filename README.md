@@ -93,64 +93,70 @@ sensor:
 
 ### Using the `auto_brightness` Script
 
-As an alternative to clight, you can run the provided `auto_brightness.sh` script as a background service using `systemd`. Below are the typical steps to install and enable it system-wide. Please note that this script has not been tested as widely as Clight, and may not work with all configurations and monitors.
-
-Please note that if your desktop environment is KDE, you should use the `auto_brightness_KDE.sh` script instead, as it plays nice with the brightness widget added to Plasma 6.
+As an alternative to clight, you can run the provided `auto_brightness.sh` script as a background service using `systemd`. Below are the typical steps to install and enable it system-wide. Please note that this script has not been tested as widely as Clight, and may not work with all configurations and monitors. If your desktop environment is Plasma, the KDE version of the script plays nice with the brightness widget in Plasma 6 and above.
 
 Test and tune the script for your setup:
-1. Edit `auto_brightness.sh` variables at the top:
+
+1. Install dependencies, make the script executable, and copy it to a location in your home directory:
+
+```bash
+sudo apt install ddcutil
+chmod +x auto_brightness_ddcutil.sh
+chmod +x auto_brightness_KDE.sh   # If you are using KDE
+mkdir -p ~/.local/bin
+cp auto_brightness_ddcutil.sh ~/.local/bin/auto_brightness.sh
+
+# Only if you are using KDE
+cp auto_brightness_KDE.sh ~/.local/bin/auto_brightness.sh
+```
+
+2. Edit `auto_brightness.sh` environmental variables:
+```bash
+nano ~/.local/bin/auto_brightness.sh
+```
    - `SENSOR_PATH` (e.g. `/sys/bus/iio/devices/iio:device0/in_illuminance_raw`)
    - `LUX_MAX` (sensor lux mapping to 100% brightness)
    - `BRIGHTNESS_MIN` / `BRIGHTNESS_MAX` (target output range)
    - `BRIGHTNESS_THRESHOLD` (hysteresis for stability)
    - `INTERVAL` (poll interval in seconds)
-2. Run the script manually in a terminal to verify behavior:
+3. Run the script manually in a terminal to verify behavior:
 
 ```bash
-sudo apt install ddcutil
-chmod +x auto_brightness.sh
-./auto_brightness.sh
+~/.local/bin/auto_brightness.sh
 ```
 
-3. Observe output and adjust `LUX_MAX` until the predicted auto brightness matches your preferences. When satisfied, proceed with copying the script to `/usr/local/bin` and creating the systemd unit as described below.
+4. Observe output and adjust `LUX_MAX` until the automatic brightness matches your preferences. When satisfied, proceed with copying the script to `/usr/local/bin` and creating the systemd unit as described below.
 
-4. Make the script executable and copy it to a system-wide location:
-```bash
-sudo cp auto_brightness.sh /usr/local/bin/
-```
-
-5. Create the systemd unit file `/etc/systemd/system/auto-brightness.service` with the following contents (create as root):
+5. Create the user systemd unit file `~/.config/systemd/user/auto-brightness.service` with the following contents:
 
 ```ini
 [Unit]
 Description=Auto Brightness using IIO light sensor
-After=multi-user.target
+After=default.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/auto_brightness.sh
+ExecStart=%h/.local/bin/auto_brightness.sh
 Restart=on-failure
 RestartSec=5
-User=root
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
-
-6. Reload systemd, enable and start the service:
+6. Reload user-level systemd, enable and start the service:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now auto-brightness.service
-sudo systemctl status auto-brightness.service
+systemctl --user daemon-reload
+systemctl --user enable --now auto-brightness.service
+systemctl --user status auto-brightness.service
 ```
 
 7. To stop or disable the service:
 
 ```bash
-sudo systemctl stop auto-brightness.service
-sudo systemctl disable auto-brightness.service
+systemctl --user stop auto-brightness.service
+systemctl --user disable auto-brightness.service
 ```
 
 
