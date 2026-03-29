@@ -76,27 +76,51 @@ You only need to follow this section if you are a developer or otherwise seeking
 
 You can launch Clight from the command line using the `-d "iio:device0" ` flag to test if your monitor responds correctly to changing brightness. If you're happy, you may make the changes permanent by editing `/etc/clight/modules.conf.d/sensor.conf`.
 
+Please note that while clight uses a good default curve, you may need to adjust the `ac_regression_points` to calibrate the brightness to your preferences.
+
+Clight scales raw lux readings to between 0 and 1 based on human brightness perception [here](https://github.com/FedeDP/Clightd/blob/ffb5213f1a9b5b045396832a4c8c93fd45c55167/src/modules/sensors/als.h#L12). 
 
 ```bash
 $ sudo nano /etc/clight/modules.conf.d/sensor.conf
 sensor:
 {
+   # Calibration Curve - Change as needed
+   ac_regression_points = [ 0.0, 0.15, 0.29, 0.45, 0.61, 0.74, 0.81, 0.88, 0.93, 0.97, 1.0 ];
    devname = "iio:device0";
+   captures = [ 1, 1 ];
 };
 ```
 
-### Running `auto_brightness.sh` as a systemd service
+### Using the `auto_brightness` Script
+
+
 
 As an alternative to clight, you can run the provided `auto_brightness.sh` script as a background service using `systemd`. Below are the typical steps to install and enable it system-wide. Please note that this script has not been tested as widely as Clight, and may not work with all configurations and monitors.
 
-1. Make the script executable and copy it to a system-wide location:
+
+Test and tune the script for your setup:
+1. Edit `auto_brightness.sh` variables at the top:
+   - `SENSOR_PATH` (e.g. `/sys/bus/iio/devices/iio:device0/in_illuminance_raw`)
+   - `LUX_MAX` (sensor lux mapping to 100% brightness)
+   - `BRIGHTNESS_MIN` / `BRIGHTNESS_MAX` (target output range)
+   - `BRIGHTNESS_THRESHOLD` (hysteresis for stability)
+   - `INTERVAL` (poll interval in seconds)
+2. Run the script manually in a terminal to verify behavior:
 
 ```bash
-sudo cp auto_brightness.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/auto_brightness.sh
+sudo apt install ddcutil
+chmod +x auto_brightness.sh
+./auto_brightness.sh
 ```
 
-2. Create the systemd unit file `/etc/systemd/system/auto-brightness.service` with the following contents (create as root):
+3. Observe output and adjust `LUX_MAX` until the predicted auto brightness matches your preferences. When satisfied, proceed with copying the script to `/usr/local/bin` and creating the systemd unit as described below.
+
+4. Make the script executable and copy it to a system-wide location:
+```bash
+sudo cp auto_brightness.sh /usr/local/bin/
+```
+
+5. Create the systemd unit file `/etc/systemd/system/auto-brightness.service` with the following contents (create as root):
 
 ```ini
 [Unit]
@@ -114,12 +138,8 @@ User=root
 WantedBy=multi-user.target
 ```
 
-Notes:
-- There are several useful configuration values that can be set using environment variables in the script.
-- Run as `root` (or a user with access to `ddcutil` and the IIO sensor) because `ddcutil` and the IIO sysfs path may require elevated privileges.
-- If your sensor device path differs (for example `iio:device1`), edit the script's `SENSOR_PATH` variable.
 
-3. Reload systemd, enable and start the service:
+6. Reload systemd, enable and start the service:
 
 ```bash
 sudo systemctl daemon-reload
@@ -127,7 +147,7 @@ sudo systemctl enable --now auto-brightness.service
 sudo systemctl status auto-brightness.service
 ```
 
-4. To stop or disable the service:
+7. To stop or disable the service:
 
 ```bash
 sudo systemctl stop auto-brightness.service
