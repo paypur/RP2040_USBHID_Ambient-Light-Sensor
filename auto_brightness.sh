@@ -26,7 +26,9 @@ get_active_count() {
 }
 
 refresh_monitor_list() {
-  echo "$(date '+%H:%M:%S') - Display state change. Re-scanning ddcutil..."
+  echo "$(date '+%H:%M:%S') - Display state change. Looking for available monitors..."
+  # Allow monitors to settle after a state change
+  sleep 5
   # Only store numeric IDs to avoid parsing issues
   mapfile -t MONITOR_IDS < <(ddcutil detect --brief 2>/dev/null | awk '/^Display [0-9]+/{print $2}')
 }
