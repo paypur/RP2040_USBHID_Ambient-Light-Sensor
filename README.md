@@ -93,10 +93,9 @@ sensor:
 
 ### Using the `auto_brightness` Script
 
-
-
 As an alternative to clight, you can run the provided `auto_brightness.sh` script as a background service using `systemd`. Below are the typical steps to install and enable it system-wide. Please note that this script has not been tested as widely as Clight, and may not work with all configurations and monitors.
 
+Please note that if your desktop environment is KDE, you should use the `auto_brightness_KDE.sh` script instead, as it plays nice with the brightness widget added to Plasma 6.
 
 Test and tune the script for your setup:
 1. Edit `auto_brightness.sh` variables at the top:
