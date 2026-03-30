@@ -31,46 +31,7 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
 
 2. While holding the bootsel button on the RP2040-Zero board, connect it to your PC. The device should appear as a USB mass storage device. Drag and drop the .uf2 file from the [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) to the mass storage device. If the device doesn't automatically reboot, simply unplug and re-plug it again.
 3. You can check the live sensor readings via `cat /sys/bus/iio/devices/iio\:device0/in_illuminance_raw`. Without a case, the bare sensor tops out at about 660 Lux. Which isn't very much, but it's more than plenty for meaningful automatic brightness adjustment.
-4. That's it, you're done! You may now set up [Clight](https://github.com/FedeDP/Clight) for automatic brightness adjustment, or write your own script that uses `ddcutil` to adjust display brightness.
-
-### Building
-
-You only need to follow this section if you are a developer or otherwise seeking to modify the firmware. For using the sensor, please download the pre-compiled firmware from [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) and follow the instructions in the previous section.
-
-**Option A: Build Script**
-
-1. ```bash
-   sudo apt update
-   sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
-   git clone https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor
-   cd RP2040_USBHID_Ambient-Light-Sensor
-   ./build.sh
-   ```
-
-**Option B: Manual Build**
-
-1. Install the Pico SDK:
-   ```bash
-   git clone https://github.com/raspberrypi/pico-sdk.git
-   cd pico-sdk
-   git submodule update --init
-   export PICO_SDK_PATH=/path/to/pico-sdk
-   ```
-
-2. Install build tools:
-   ```bash
-   sudo apt update
-   sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
-   ```
-
-3. Compile
-
-   ```bash
-   mkdir build
-   cd build
-   cmake ..
-   make -j4
-   ```
+4. That's it, you're done! You may now set up [Clight](https://github.com/FedeDP/Clight) for automatic brightness adjustment, or use the auto-brightness bash script in this repo.
 
 ### Clight Instructions
 
@@ -125,7 +86,7 @@ nano ~/.local/bin/auto_brightness.sh
 ~/.local/bin/auto_brightness.sh
 ```
 
-4. Observe output and adjust `LUX_MAX` until the automatic brightness matches your preferences. When satisfied, proceed with copying the script to `/usr/local/bin` and creating the systemd unit as described below.
+4. Observe output and adjust `LUX_MAX` until the automatic brightness matches your preferences. When satisfied, proceed with creating the systemd unit as described below.
 
 5. Create the user systemd unit file `~/.config/systemd/user/auto-brightness.service` with the following contents:
 
@@ -158,6 +119,46 @@ systemctl --user status auto-brightness.service
 systemctl --user stop auto-brightness.service
 systemctl --user disable auto-brightness.service
 ```
+
+
+### Building
+
+You only need to follow this section if you are a developer or otherwise seeking to modify the firmware. For using the sensor, please download the pre-compiled firmware from [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) and follow the instructions in the previous section.
+
+**Option A: Build Script**
+
+1. ```bash
+   sudo apt update
+   sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
+   git clone https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor
+   cd RP2040_USBHID_Ambient-Light-Sensor
+   ./build.sh
+   ```
+
+**Option B: Manual Build**
+
+1. Install the Pico SDK:
+   ```bash
+   git clone https://github.com/raspberrypi/pico-sdk.git
+   cd pico-sdk
+   git submodule update --init
+   export PICO_SDK_PATH=/path/to/pico-sdk
+   ```
+
+2. Install build tools:
+   ```bash
+   sudo apt update
+   sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
+   ```
+
+3. Compile
+
+   ```bash
+   mkdir build
+   cd build
+   cmake ..
+   make -j4
+   ```
 
 
 ### Help Wanted
