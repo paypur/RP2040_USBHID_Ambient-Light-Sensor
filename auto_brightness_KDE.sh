@@ -24,10 +24,21 @@ check_sensor() {
 }
 
 update_brightness() {
-  # Read raw sensor value
-  if ! RAW_LUX=$(cat "$SENSOR_PATH" 2>/dev/null); then
-    return 1
-  fi
+  # Take 5 sensor readings and average them
+  local samples=5
+  local sum=0
+  local reading=0
+
+  for ((i=0; i<samples; i++)); do
+    if ! reading=$(cat "$SENSOR_PATH" 2>/dev/null); then
+      return 1
+    fi
+    [[ "$reading" =~ ^[0-9]+$ ]] || return 1
+    sum=$((sum + reading))
+    sleep 0.05
+  done
+
+  RAW_LUX=$((sum / samples))
 
   # Calculate Target Brightness using logarithmic scaling
   TARGET_BRIGHTNESS=$(awk -v lux="$RAW_LUX" -v mx="$LUX_MAX" -v b_min="$BRIGHTNESS_MIN" -v b_max="$BRIGHTNESS_MAX" 'BEGIN {
@@ -49,7 +60,7 @@ update_brightness() {
   # We fetch output names dynamically in case of hot-plugging
   for name in $(kscreen-doctor -o | grep "Output: " | awk '{print $3}'); do
     if kscreen-doctor output."$name".brightness."$TARGET_BRIGHTNESS" > /dev/null 2>&1; then
-       echo "$(date '+%H:%M:%S') - $name: → ${TARGET_BRIGHTNESS}% (Lux: ${RAW_LUX})"
+      echo "$(date '+%H:%M:%S') - $name: → ${TARGET_BRIGHTNESS}% (Lux avg: ${RAW_LUX})"
     fi
   done
 

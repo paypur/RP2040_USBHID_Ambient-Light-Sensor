@@ -63,9 +63,21 @@ update_brightness() {
     return 0
   fi
 
-  if ! RAW_LUX=$(cat "$SENSOR_PATH" 2>/dev/null); then
-    return 1
-  fi
+  # Take 5 sensor readings and average them
+  local samples=5
+  local sum=0
+  local reading=0
+
+  for ((i=0; i<samples; i++)); do
+    if ! reading=$(cat "$SENSOR_PATH" 2>/dev/null); then
+      return 1
+    fi
+    [[ "$reading" =~ ^[0-9]+$ ]] || return 1
+    sum=$((sum + reading))
+    sleep 0.05
+  done
+
+  RAW_LUX=$((sum / samples))
 
   TARGET_BRIGHTNESS=$(awk -v lux="$RAW_LUX" -v mx="$LUX_MAX" -v b_min="$BRIGHTNESS_MIN" -v b_max="$BRIGHTNESS_MAX" 'BEGIN {
     v = (lux < 0) ? 0 : (lux > mx) ? mx : lux
