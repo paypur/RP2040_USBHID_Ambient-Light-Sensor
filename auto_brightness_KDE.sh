@@ -16,11 +16,42 @@ LAST_SET_BRIGHTNESS=-1
 
 # ── Logic ────────────────────────────────────────────────────────────────────
 
+# Wait for displays to initialize
+sleep 15
+
+log() {
+  echo "$(date '+%H:%M:%S') - $*" >&2
+}
+
+warn() {
+  log "WARN: $*"
+}
+
+error() {
+  log "ERROR: $*"
+}
+
 check_sensor() {
   if [[ ! -r "$SENSOR_PATH" ]]; then
-    echo "CRITICAL ERROR: Sensor not found or not readable at $SENSOR_PATH" >&2
+    error "Sensor not found or not readable at $SENSOR_PATH"
     exit 1
   fi
+}
+
+kscreen_qt_platform() {
+  if [[ -n "${QT_QPA_PLATFORM:-}" ]]; then
+    printf '%s' "$QT_QPA_PLATFORM"
+  elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+    printf 'wayland'
+  elif [[ -n "${DISPLAY:-}" ]]; then
+    printf 'xcb'
+  else
+    printf 'offscreen'
+  fi
+}
+
+run_kscreen_doctor() {
+  env QT_QPA_PLATFORM="$(kscreen_qt_platform)" kscreen-doctor "$@"
 }
 
 update_brightness() {
@@ -28,6 +59,8 @@ update_brightness() {
   local samples=5
   local sum=0
   local reading=0
+  local raw_lux
+  local target_brightness
 
   for ((i=0; i<samples; i++)); do
     if ! reading=$(cat "$SENSOR_PATH" 2>/dev/null); then
@@ -38,10 +71,10 @@ update_brightness() {
     sleep 0.05
   done
 
-  RAW_LUX=$((sum / samples))
+  raw_lux=$((sum / samples))
 
   # Calculate Target Brightness using logarithmic scaling
-  TARGET_BRIGHTNESS=$(awk -v lux="$RAW_LUX" -v mx="$LUX_MAX" -v b_min="$BRIGHTNESS_MIN" -v b_max="$BRIGHTNESS_MAX" 'BEGIN {
+  target_brightness=$(awk -v lux="$raw_lux" -v mx="$LUX_MAX" -v b_min="$BRIGHTNESS_MIN" -v b_max="$BRIGHTNESS_MAX" 'BEGIN {
     v = (lux < 0) ? 0 : (lux > mx) ? mx : lux
     ratio = log(v + 1) / log(mx + 1)
     b = ratio * (b_max - b_min) + b_min
@@ -49,22 +82,36 @@ update_brightness() {
   }')
 
   # Only update if the change exceeds the threshold
-  DELTA=$(( TARGET_BRIGHTNESS - LAST_SET_BRIGHTNESS ))
-  ABS_DELTA=${DELTA#-}
+  local delta=$(( target_brightness - LAST_SET_BRIGHTNESS ))
+  local abs_delta=${delta#-}
 
-  if [[ "$ABS_DELTA" -lt "$BRIGHTNESS_THRESHOLD" ]]; then
+  if [[ "$abs_delta" -lt "$BRIGHTNESS_THRESHOLD" ]]; then
     return 0
   fi
 
-  # Apply brightness to all outputs via kscreen-doctor
-  # We fetch output names dynamically in case of hot-plugging
-  for name in $(kscreen-doctor -o | grep "Output: " | awk '{print $3}'); do
-    if kscreen-doctor output."$name".brightness."$TARGET_BRIGHTNESS" > /dev/null 2>&1; then
-      echo "$(date '+%H:%M:%S') - $name: → ${TARGET_BRIGHTNESS}% (Lux avg: ${RAW_LUX})"
+  local output_lines
+  if ! output_lines=$(run_kscreen_doctor -o 2>/dev/null); then
+    warn "kscreen-doctor query failed; skipping brightness update"
+    return 0
+  fi
+
+  local outputs=()
+  mapfile -t outputs < <(printf '%s\\n' "$output_lines" | awk '/Output: /{print $3}')
+
+  if [[ ${#outputs[@]} -eq 0 ]]; then
+    warn "No kscreen outputs detected; skipping brightness update"
+    return 0
+  fi
+
+  for name in "${outputs[@]}"; do
+    if run_kscreen_doctor output."$name".brightness."$target_brightness" > /dev/null 2>&1; then
+      echo "$(date '+%H:%M:%S') - $name: → ${target_brightness}% (Lux avg: ${raw_lux})"
+    else
+      warn "Failed to set brightness for $name"
     fi
   done
 
-  LAST_SET_BRIGHTNESS="$TARGET_BRIGHTNESS"
+  LAST_SET_BRIGHTNESS="$target_brightness"
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────

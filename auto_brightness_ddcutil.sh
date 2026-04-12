@@ -19,6 +19,8 @@ LAST_SET_BRIGHTNESS=-1
 MONITOR_IDS=()
 
 # ── Logic ────────────────────────────────────────────────────────────────────
+# Wait for displays to initialize
+sleep 15
 
 get_active_count() {
   # Sums the '1's (enabled) and '0's (disabled) into a single integer
