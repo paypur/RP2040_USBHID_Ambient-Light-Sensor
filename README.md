@@ -16,6 +16,16 @@ This sensor implements the **USB HID (Human Interface Device)** standard. HID is
 
 In practice, that means the sensor is detected automatically on **Linux, Windows, and macOS**, making it a strong base for automatic brightness tools and custom scripts.
 
+### Overview
+[Requirements](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#requirements)\
+[Setting up Clight](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#clight-instructions)\
+[Setting up auto-brightness script](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#using-the-auto_brightness-script)\
+[Building](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#building)\
+[How to contribute](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#help-wanted)\
+[USB HID basics](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#advanced-internals-and-notes)\
+[AI usage policy](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#ai-usage-policy)\
+[Acknowledgements](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor#acknowledgements)
+
 ### Requirements
 
 - Raspberry Pi RP2040 microcontroller board. 
