@@ -2,7 +2,7 @@
 
 Build a **plug-and-play USB Ambient Light Sensor (ALS)** with a Raspberry Pi RP2040 board.
 <p align="center">
-<img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="200" />
+<img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="400" />
 </p align="center">
 This project helps your computer automatically adjust monitor brightness based on room lighting. It works with either:
 
