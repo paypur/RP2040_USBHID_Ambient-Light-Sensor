@@ -113,7 +113,7 @@ nano ~/.local/bin/auto_brightness.sh
 ```ini
 [Unit]
 Description=Auto Brightness using IIO light sensor
-After=default.target
+After=graphical-session.target
 
 [Service]
 Type=simple
@@ -122,7 +122,7 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 ```
 
 6. Reload user-level systemd, enable and start the service:
