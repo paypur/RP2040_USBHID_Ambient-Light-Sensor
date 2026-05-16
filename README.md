@@ -36,10 +36,12 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
 <p align="center">
 <img src="Images/rp2040-zero.png" alt="RP 2040-Zero Board" width="150" />
 </p align="center">
+
 - TEMT6000 Light Sensor in a breakout board. Widely available from retail sources, including SparkFun and eBay.
 <p align="center">
 <img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="150" />&nbsp;<img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="150" />
 </p align="center">
+
 - Soldering iron and headers.
 
 ### Instructions
