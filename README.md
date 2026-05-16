@@ -1,7 +1,9 @@
 # RP2040 USB HID Ambient Light Sensor
 
 Build a **plug-and-play USB Ambient Light Sensor (ALS)** with a Raspberry Pi RP2040 board.
-
+<p align="center">
+<img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="200" />
+</p align="center">
 This project helps your computer automatically adjust monitor brightness based on room lighting. It works with either:
 
 - [Clight](https://github.com/FedeDP/Clight) on Linux for DDC/CI-capable monitors (most HDMI and DisplayPort monitors),
@@ -31,13 +33,13 @@ In practice, that means the sensor is detected automatically on **Linux, Windows
 
 - Raspberry Pi RP2040 microcontroller board. 
 I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm) but really, any RP2040 board you can get hold of, for example the Raspberry Pi Pico.
-
+<p align="center">
 <img src="Images/rp2040-zero.png" alt="RP 2040-Zero Board" width="150" />
-
+</p align="center">
 - TEMT6000 Light Sensor in a breakout board. Widely available from retail sources, including SparkFun and eBay.
-
+<p align="center">
 <img src="Images/temt6000-1.jpg" alt="TEMT6000 Sensor Example 1" width="150" />&nbsp;<img src="Images/temt6000-2.jpg" alt="TEMT6000 Sensor Example 2" width="150" />
-
+</p align="center">
 - Soldering iron and headers.
 
 ### Instructions
@@ -47,9 +49,9 @@ I recommend a [Waveshare RP2040-Zero](https://www.waveshare.com/rp2040-zero.htm)
    - Please note that the Signal pin has to be connected to the chip's ADC, which can only read from GPIO pins 26, 27, 28 or 29.
    - **Important Note: The TEMT6000 sensor recommends an operating voltage of up to 5V, but you should supply at most 3.3 V to Vcc. This is because the ADC of the RP2040 is referenced to 3.3 V, and a higher voltage might damage the chip.**
    - Tidbit: Since the sensor draws at most about 0.5 mA, it is safe to power it from a GPIO Pin.
-
+<p align="center">
 <img src="Images/sensor-1.jpg" alt="Sensor Example 1" width="200" /> <img src="Images/sensor-2.jpg" alt="Sensor Example 2" width="200" />
-
+</p align="center">
 2. While holding the bootsel button on the RP2040-Zero board, connect it to your PC. The device should appear as a USB mass storage device. Drag and drop the .uf2 file from the [github releases](https://github.com/thariq-shanavas/RP2040_USBHID_Ambient-Light-Sensor/releases) to the mass storage device. If the device doesn't automatically reboot, simply unplug and re-plug it again.
 3. You can check the live sensor readings via `cat /sys/bus/iio/devices/iio\:device0/in_illuminance_raw`. Without a case, the bare sensor tops out at about 660 Lux. Which isn't very much, but it's more than plenty for meaningful automatic brightness adjustment.
 4. That's it, you're done! You may now set up [Clight](https://github.com/FedeDP/Clight) for automatic brightness adjustment, or use the auto-brightness bash script in this repo.
