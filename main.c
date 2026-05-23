@@ -2,6 +2,7 @@
 #include "bsp/board.h"
 #include "hardware/irq.h"
 #include "pico/time.h"
+#include "rust_bindings.h"
 #include "tusb.h"
 
 // Define HID report types manually since they might not be available
@@ -48,18 +49,6 @@ void adc_init_sensor(void) {
 
 
 
-//--------------------------------------------------------------------+
-// Sensor Reading
-//--------------------------------------------------------------------+
-
-uint16_t read_illuminance(void) {
-    uint16_t adc_value = adc_read();
-    // Scale using y = 0.6294*x - 117.47, clamp to uint16_t range
-    float y = 0.1611f * (float)adc_value;
-    if (y < 0.0f) y = 0.0f;
-    if (y > 65535.0f) y = 65535.0f;
-    return (uint16_t)(y + 0.5f);
-}
 
 //--------------------------------------------------------------------+
 // HID Report Functions
@@ -139,7 +128,7 @@ bool timer_callback(repeating_timer_t *rt) {
 // Invoked when received GET_REPORT control request
 // Application must fill buffer report's content and return its length.
 // Return zero will cause the stack to STALL request
-uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, uint8_t report_type, uint8_t* buffer, uint16_t reqlen) {
+uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t* buffer, uint16_t reqlen) {
     (void) instance;
     (void) reqlen;
 
@@ -174,7 +163,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, uint8_t repo
 
 // Invoked when received SET_REPORT control request or
 // received data on OUT endpoint ( Report ID = 0, Type = 0 )
-void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, uint8_t report_type, uint8_t const* buffer, uint16_t bufsize) {
+void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize) {
     (void) instance;
     
     if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORT_ID_FEATURE && bufsize == 3) {
@@ -246,13 +235,12 @@ int main(void) {
     g_sensor_state.illuminance = read_illuminance();
     send_input_report(g_sensor_state.illuminance, DEFAULT_SENSOR_EVENT);
 
-    while (1) {
+    // ReSharper disable once CppDFAEndlessLoop
+    while (true) {
         tud_task(); // TinyUSB device task
         sensor_task();
         
         // Small delay to prevent overwhelming the system
         sleep_ms(1);
     }
-
-    return 0;
 }

@@ -11,10 +11,21 @@ set(CMAKE_CXX_STANDARD 17)
 # Creates a pico-sdk subdirectory in our project for the libraries
 pico_sdk_init()
 
+include(FetchContent)
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.6
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(MANIFEST_PATH als_rust_lib/Cargo.toml)
+
 # Tell CMake where to find the executable source files
 add_executable(${PROJECT_NAME}
     main.c
     usb_descriptors.c
+        rust_bindings.h
 )
 
 # Add the current directory to include path for tusb_config.h
@@ -24,13 +35,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 pico_add_extra_outputs(${PROJECT_NAME})
 
 # Link to pico_stdlib (gpio, time, etc. functions)
-target_link_libraries(${PROJECT_NAME} 
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
     pico_stdlib
     tinyusb_device
     tinyusb_board
     hardware_adc
     hardware_timer
     pico_unique_id
+    als_rust_lib
 )
 
 # Enable usb output, disable uart output
