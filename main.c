@@ -11,7 +11,7 @@
 #define HID_REPORT_TYPE_FEATURE     3
 
 // Global sensor state
-static sensor_state_t g_sensor_state = {
+volatile sensor_state_t g_sensor_state = {
     .power_state = DEFAULT_POWER_STATE,
     .reporting_state = DEFAULT_REPORTING_STATE,
     .report_interval = DEFAULT_REPORT_INTERVAL,
@@ -21,10 +21,10 @@ static sensor_state_t g_sensor_state = {
 };
 
 // Timer for periodic reports
-static repeating_timer_t report_timer;
+volatile repeating_timer_t report_timer;
 
 // Volatile flag for timer interrupt
-static volatile bool timer_triggered = false;
+volatile bool timer_triggered = false;
 
 //--------------------------------------------------------------------+
 // Hardware Initialization
@@ -111,55 +111,10 @@ bool decode_feature_report(const uint8_t *report, sensor_state_t *state) {
     return changed;
 }
 
-//--------------------------------------------------------------------+
-// Timer Interrupt Handler
-//--------------------------------------------------------------------+
-
-bool timer_callback(repeating_timer_t *rt) {
-    (void)rt;
-    timer_triggered = true;
-    return true; // Keep repeating
-}
 
 //--------------------------------------------------------------------+
 // TinyUSB HID Callbacks (Running in interrupt context)
 //--------------------------------------------------------------------+
-
-// Invoked when received GET_REPORT control request
-// Application must fill buffer report's content and return its length.
-// Return zero will cause the stack to STALL request
-uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t* buffer, uint16_t reqlen) {
-    (void) instance;
-    (void) reqlen;
-
-    if (report_type == HID_REPORT_TYPE_INPUT && report_id == REPORT_ID_INPUT) {
-        // Return current input report with fresh sensor data
-        uint16_t current_illuminance = read_illuminance();
-        g_sensor_state.illuminance = current_illuminance;  // Update cached value
-        
-        uint32_t data = (current_illuminance & 0xFFFF) | ((DEFAULT_SENSOR_EVENT & 0x7) << 16);
-        
-        buffer[0] = data & 0xFF;        // Illuminance bits 0-7
-        buffer[1] = (data >> 8) & 0xFF; // Illuminance bits 8-15
-        buffer[2] = (data >> 16) & 0xFF; // Event bits + padding
-        
-        return 3;
-    }
-    else if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORT_ID_FEATURE) {
-        // Return current feature report
-        uint32_t data = (g_sensor_state.reporting_state & 0x3) |
-                       ((g_sensor_state.power_state & 0x7) << 2) |
-                       ((g_sensor_state.report_interval & 0xFFF) << 5);
-
-        buffer[0] = data & 0xFF;
-        buffer[1] = (data >> 8) & 0xFF;
-        buffer[2] = (data >> 16) & 0xFF;
-        
-        return 3;
-    }
-
-    return 0;
-}
 
 // Invoked when received SET_REPORT control request or
 // received data on OUT endpoint ( Report ID = 0, Type = 0 )
