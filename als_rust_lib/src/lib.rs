@@ -2,15 +2,24 @@
 
 mod types;
 
+use core::ffi::c_void;
 use crate::types::*;
 use core::panic::PanicInfo;
+use core::ptr::null;
 use core::slice;
 
 unsafe extern "C" {
     pub static mut g_sensor_state: SensorState;
+    pub static mut report_timer: RepeatingTimer;
     pub static mut timer_triggered: bool;
 
     fn adc_read_rs() -> u16;
+
+    fn add_repeating_timer_ms_rs(delay_ms: i32, callback: extern "C" fn(*const RepeatingTimer) -> bool, user_data: *const c_void, out: *const RepeatingTimer) -> bool;
+    fn cancel_repeating_timer_rs(timer: *const RepeatingTimer) -> bool;
+
+    fn tud_hid_ready_rs() -> bool;
+    fn tud_hid_report_rs(report_id: HIDReportID, report: *const c_void, len: u16) -> bool;
 }
 
 #[unsafe(no_mangle)]
@@ -47,7 +56,7 @@ pub extern "C" fn tud_hid_get_report_cb(
         let current_illuminance: u16 = read_illuminance();
         unsafe { g_sensor_state.illuminance = current_illuminance; } // Update cached value
 
-        let data: u32 = current_illuminance as u32 | ((SensorEvent::DataUpdated as u32) << 16);
+        let data: u32 = current_illuminance as u32 | ((SensorEvent::default() as u32) << 16);
 
         slice[0] = (data & 0xFF) as u8; // Illuminance bits 0-7
         slice[1] = ((data >> 8) & 0xFF) as u8; // Illuminance bits 8-15
@@ -57,9 +66,9 @@ pub extern "C" fn tud_hid_get_report_cb(
     } else if report_type == HIDReportType::Feature && report_id == HIDReportID::Feature {
         // Return current feature report
         let data: u32 = unsafe {
-            (g_sensor_state.reporting_state as u32)
-                | ((g_sensor_state.power_state as u32) << 2)
-                | ((g_sensor_state.report_interval as u32) << 5)
+            (g_sensor_state.reporting_state as u32 & 0x3)
+                | ((g_sensor_state.power_state as u32 & 0x7) << 2)
+                | ((g_sensor_state.report_interval as u32 & 0xFFF) << 5)
         };
 
         slice[0] = (data & 0xFF) as u8;
@@ -70,6 +79,63 @@ pub extern "C" fn tud_hid_get_report_cb(
     }
 
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn send_input_report(illuminance: u16, sensor_event: SensorEvent) {
+    if unsafe { !tud_hid_ready_rs() } { return; }
+
+    // Pack data: 16-bit illuminance + 3-bit event + 5-bit padding
+    let data: u32 = illuminance as u32 | ((sensor_event as u32 & 0x7) << 16);
+
+    unsafe { tud_hid_report_rs(HIDReportID::Input, &data as *const u32 as *const c_void, 3); }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn send_feature_report() {
+    unsafe {
+        if !tud_hid_ready_rs() { return; }
+
+        // Pack: reporting_state(2) + power_state(3) + report_interval(12) + padding(7)
+        let data: u32 = (g_sensor_state.reporting_state as u32 & 0x3) | ((g_sensor_state.power_state as u32 & 0x7) << 2) | ((g_sensor_state.report_interval as u32 & 0xFFF) << 5);
+
+        tud_hid_report_rs(HIDReportID::Feature, data as *const u32 as *const c_void, 3);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sensor_task() {
+    unsafe {
+        // Handle feature report updates
+        if g_sensor_state.feature_report_updated {
+            g_sensor_state.feature_report_updated = false;
+            send_feature_report();
+
+            // Restart timer with new interval if needed
+            cancel_repeating_timer_rs(&raw const report_timer);
+            if g_sensor_state.power_state == PowerState::Full && g_sensor_state.reporting_state == ReportingState::AllEvents {
+                add_repeating_timer_ms_rs(g_sensor_state.report_interval as i32, timer_callback, null(), &raw const report_timer);
+            }
+        }
+
+        // Handle periodic reporting
+        if timer_triggered {
+            timer_triggered = false;
+            if g_sensor_state.power_state == PowerState::Full && g_sensor_state.reporting_state == ReportingState::AllEvents {
+                g_sensor_state.illuminance = read_illuminance();
+                send_input_report(g_sensor_state.illuminance, SensorEvent::default());
+            }
+        }
+
+        // Handle state transitions and edge cases
+        if g_sensor_state.reporting_state == ReportingState::AllEvents && g_sensor_state.power_state != PowerState::Full {
+            g_sensor_state.power_state = PowerState::Full;
+            send_feature_report();
+
+            g_sensor_state.illuminance = read_illuminance();
+            send_input_report(g_sensor_state.illuminance, SensorEvent::default());
+        }
+    }
 }
 
 #[panic_handler]
