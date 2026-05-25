@@ -223,67 +223,67 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 // String Descriptors
 //--------------------------------------------------------------------+
 
-// array of pointer to string descriptors
-char const* string_desc_arr [] =
-{
-  (const char[]) { 0x09, 0x04 }, // 0: is supported language is English (0x0409)
-  "Raspberry Pi",                // 1: Manufacturer
-  "RP2040 ALS HID Sensor",       // 2: Product
-  NULL,                          // 3: Serials, should use chip ID
-};
-
-static uint16_t _desc_str[32];
-
-// Invoked when received GET STRING DESCRIPTOR request
-// Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
-uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
-{
-  (void) langid;
-
-  uint8_t chr_count;
-
-  if ( index == 0)
-  {
-    memcpy(&_desc_str[1], string_desc_arr[0], 2);
-    chr_count = 1;
-  }
-  else if ( index == 3 )
-  {
-    // Get unique serial number from RP2040 chip ID
-    pico_unique_board_id_t board_id;
-    pico_get_unique_board_id(&board_id);
-    
-    char serial_str[17];  // 8 bytes = 16 hex chars + null terminator
-    for(int i = 0; i < 8; i++) {
-      sprintf(&serial_str[i * 2], "%02X", board_id.id[i]);
-    }
-    serial_str[16] = 0;
-    
-    chr_count = 16;
-    for(int i = 0; i < chr_count; i++) {
-      _desc_str[1 + i] = serial_str[i];
-    }
-  }
-  else
-  {
-
-    if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) return NULL;
-
-    const char* str = string_desc_arr[index];
-
-    // Cap at max char
-    chr_count = strlen(str);
-    if ( chr_count > 31 ) chr_count = 31;
-
-    // Convert ASCII string into UTF-16
-    for(uint8_t i=0; i<chr_count; i++)
-    {
-      _desc_str[1+i] = str[i];
-    }
-  }
-
-  // first byte is length (including header), second byte is string type
-  _desc_str[0] = (TUSB_DESC_STRING << 8 ) | (2*chr_count + 2);
-
-  return _desc_str;
-}
+// // array of pointer to string descriptors
+// char const* string_desc_arr [] =
+// {
+//   (const char[]) { 0x09, 0x04 }, // 0: is supported language is English (0x0409)
+//   "Raspberry Pi",                // 1: Manufacturer
+//   "RP2040 ALS HID Sensor",       // 2: Product
+//   NULL,                          // 3: Serials, should use chip ID
+// };
+//
+// static uint16_t _desc_str[32];
+//
+// // Invoked when received GET STRING DESCRIPTOR request
+// // Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
+// uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
+// {
+//   (void) langid;
+//
+//   uint8_t chr_count;
+//
+//   if ( index == 0)
+//   {
+//     memcpy(&_desc_str[1], string_desc_arr[0], 2);
+//     chr_count = 1;
+//   }
+//   else if ( index == 3 )
+//   {
+//     // Get unique serial number from RP2040 chip ID
+//     pico_unique_board_id_t board_id;
+//     pico_get_unique_board_id(&board_id);
+//
+//     char serial_str[17];  // 8 bytes = 16 hex chars + null terminator
+//     for(int i = 0; i < 8; i++) {
+//       sprintf(&serial_str[i * 2], "%02X", board_id.id[i]);
+//     }
+//     serial_str[16] = 0;
+//
+//     chr_count = 16;
+//     for(int i = 0; i < chr_count; i++) {
+//       _desc_str[1 + i] = serial_str[i];
+//     }
+//   }
+//   else
+//   {
+//
+//     if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) return NULL;
+//
+//     const char* str = string_desc_arr[index];
+//
+//     // Cap at max char
+//     chr_count = strlen(str);
+//     if ( chr_count > 31 ) chr_count = 31;
+//
+//     // Convert ASCII string into UTF-16
+//     for(uint8_t i=0; i<chr_count; i++)
+//     {
+//       _desc_str[1+i] = str[i];
+//     }
+//   }
+//
+//   // first byte is length (including header), second byte is string type
+//   _desc_str[0] = (TUSB_DESC_STRING << 8 ) | (2*chr_count + 2);
+//
+//   return _desc_str;
+// }

@@ -84,32 +84,32 @@ void adc_init_sensor(void) {
 //     tud_hid_report(REPORT_ID_FEATURE, report, sizeof(report));
 // }
 
-bool decode_feature_report(const uint8_t *report, sensor_state_t *state) {
-    uint32_t data = report[0] | (report[1] << 8) | (report[2] << 16);
-    
-    uint8_t received_reporting = data & 0x3;
-    uint8_t received_power = (data >> 2) & 0x7;
-    uint16_t received_interval = (data >> 5) & 0xFFF;
-
-    bool changed = false;
-    
-    if (received_reporting != 0 && received_reporting != state->reporting_state) {
-        state->reporting_state = received_reporting;
-        changed = true;
-    }
-    
-    if (received_power != 0 && received_power != state->power_state) {
-        state->power_state = received_power;
-        changed = true;
-    }
-    
-    if (received_interval != 0 && received_interval != state->report_interval) {
-        state->report_interval = received_interval;
-        changed = true;
-    }
-
-    return changed;
-}
+// bool decode_feature_report(const uint8_t *report, sensor_state_t *state) {
+//     uint32_t data = report[0] | (report[1] << 8) | (report[2] << 16);
+//
+//     uint8_t received_reporting = data & 0x3;
+//     uint8_t received_power = (data >> 2) & 0x7;
+//     uint16_t received_interval = (data >> 5) & 0xFFF;
+//
+//     bool changed = false;
+//
+//     if (received_reporting != 0 && received_reporting != state->reporting_state) {
+//         state->reporting_state = received_reporting;
+//         changed = true;
+//     }
+//
+//     if (received_power != 0 && received_power != state->power_state) {
+//         state->power_state = received_power;
+//         changed = true;
+//     }
+//
+//     if (received_interval != 0 && received_interval != state->report_interval) {
+//         state->report_interval = received_interval;
+//         changed = true;
+//     }
+//
+//     return changed;
+// }
 
 
 //--------------------------------------------------------------------+
@@ -152,19 +152,19 @@ bool decode_feature_report(const uint8_t *report, sensor_state_t *state) {
 //     return 0;
 // }
 
-// Invoked when received SET_REPORT control request or
-// received data on OUT endpoint ( Report ID = 0, Type = 0 )
-void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize) {
-    (void) instance;
-    
-    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORT_ID_FEATURE && bufsize == 3) {
-        // Process feature report in interrupt context
-        bool changed = decode_feature_report(buffer, &g_sensor_state);
-        if (changed) {
-            g_sensor_state.feature_report_updated = true;
-        }
-    }
-}
+// // Invoked when received SET_REPORT control request or
+// // received data on OUT endpoint ( Report ID = 0, Type = 0 )
+// void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize) {
+//     (void) instance;
+//
+//     if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORT_ID_FEATURE && bufsize == 3) {
+//         // Process feature report in interrupt context
+//         bool changed = decode_feature_report(buffer, &g_sensor_state);
+//         if (changed) {
+//             g_sensor_state.feature_report_updated = true;
+//         }
+//     }
+// }
 
 //--------------------------------------------------------------------+
 // Main Sensor Task
@@ -222,7 +222,7 @@ int main(void) {
     adc_init_sensor();
     
     // Send initial reports to prime the USB buffers
-    send_feature_report(&g_sensor_state);
+    send_feature_report();
     g_sensor_state.illuminance = read_illuminance();
     send_input_report(g_sensor_state.illuminance, DEFAULT_SENSOR_EVENT);
 

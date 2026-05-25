@@ -1,12 +1,13 @@
 #![no_std]
 
 mod types;
+pub mod tinyusb;
 
-use core::ffi::c_void;
 use crate::types::*;
+use core::ffi::c_void;
+use core::mem::transmute;
 use core::panic::PanicInfo;
 use core::ptr::null;
-use core::slice;
 
 unsafe extern "C" {
     pub static mut g_sensor_state: SensorState;
@@ -37,49 +38,6 @@ pub extern "C" fn timer_callback(_rt: *const RepeatingTimer) -> bool {
     true // Keep repeating
 }
 
-// Invoked when received GET_REPORT control request
-// Application must fill buffer report's content and return its length.
-// Return zero will cause the stack to STALL request
-#[allow(private_interfaces)]
-#[unsafe(no_mangle)]
-pub extern "C" fn tud_hid_get_report_cb(
-    _instance: u8,
-    report_id: HIDReportID,
-    report_type: HIDReportType,
-    buffer: *mut u8,
-    req_len: u16,
-) -> u16 {
-    let slice = unsafe { slice::from_raw_parts_mut(buffer, req_len as usize) };
-
-    if report_type == HIDReportType::Input && report_id == HIDReportID::Input {
-        // Return current input report with fresh sensor data
-        let current_illuminance: u16 = read_illuminance();
-        unsafe { g_sensor_state.illuminance = current_illuminance; } // Update cached value
-
-        let data: u32 = current_illuminance as u32 | ((SensorEvent::default() as u32) << 16);
-
-        slice[0] = (data & 0xFF) as u8; // Illuminance bits 0-7
-        slice[1] = ((data >> 8) & 0xFF) as u8; // Illuminance bits 8-15
-        slice[2] = ((data >> 16) & 0xFF) as u8; // Event bits + padding
-
-        return 3;
-    } else if report_type == HIDReportType::Feature && report_id == HIDReportID::Feature {
-        // Return current feature report
-        let data: u32 = unsafe {
-            (g_sensor_state.reporting_state as u32 & 0x3)
-                | ((g_sensor_state.power_state as u32 & 0x7) << 2)
-                | ((g_sensor_state.report_interval as u32 & 0xFFF) << 5)
-        };
-
-        slice[0] = (data & 0xFF) as u8;
-        slice[1] = ((data >> 8) & 0xFF) as u8;
-        slice[2] = ((data >> 16) & 0xFF) as u8;
-
-        return 3;
-    }
-
-    0
-}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn send_input_report(illuminance: u16, sensor_event: SensorEvent) {
@@ -100,6 +58,36 @@ pub extern "C" fn send_feature_report() {
         let data: u32 = (g_sensor_state.reporting_state as u32 & 0x3) | ((g_sensor_state.power_state as u32 & 0x7) << 2) | ((g_sensor_state.report_interval as u32 & 0xFFF) << 5);
 
         tud_hid_report_rs(HIDReportID::Feature, data as *const u32 as *const c_void, 3);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn decode_feature_report(report: *const u8) -> bool {
+    unsafe {
+        let data: u32 = (*report.add(0) as u32) | ((*report.add(1) as u32) << 8) | ((*report.add(2) as u32) << 16);
+
+        let mut changed: bool = false;
+
+        let received_reporting: ReportingState = transmute((data & 0x3) as u8);
+        let received_power: PowerState = transmute(((data >> 2) & 0x7) as u8);
+        let received_interval: u16 = ((data >> 5) & 0xFFF) as u16;
+
+        if received_reporting != ReportingState::Invalid && received_reporting != g_sensor_state.reporting_state {
+            g_sensor_state.reporting_state = received_reporting;
+            changed = true;
+        }
+
+        if received_power != PowerState::Invalid && received_power != g_sensor_state.power_state {
+            g_sensor_state.power_state = received_power;
+            changed = true;
+        }
+
+        if received_interval != 0 && received_interval != g_sensor_state.report_interval {
+            g_sensor_state.report_interval = received_interval;
+            changed = true;
+        }
+
+        changed
     }
 }
 

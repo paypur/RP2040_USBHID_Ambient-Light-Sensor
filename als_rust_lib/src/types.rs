@@ -12,6 +12,7 @@ pub struct SensorState {
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub enum PowerState {
+    Invalid = 0,
     Undefined = 1,
     Full = 2,    // D0
     Low = 3,     // D1
@@ -24,6 +25,7 @@ pub enum PowerState {
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub enum ReportingState {
+    Invalid = 0,
     NoEvents = 1,
     AllEvents = 2,
 }
@@ -32,6 +34,7 @@ pub enum ReportingState {
 #[derive(Default)]
 #[repr(C)]
 pub enum SensorEvent {
+    Invalid = 0,
     Unknown = 1,
     Changed = 2,
     PropertyChanged = 3,
