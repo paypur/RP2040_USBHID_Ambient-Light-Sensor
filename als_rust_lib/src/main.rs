@@ -13,13 +13,10 @@ use rp2040_hal::gpio::bank0::{Gpio26, Gpio27, Gpio28};
 use rp2040_hal::gpio::{FunctionNull, FunctionSio, Pin, PinState, PullDown, PullNone, SioInput};
 use rp2040_hal::usb::UsbBus;
 use rp2040_hal::{Adc, Clock, Sio, Watchdog, clocks, gpio, pac, entry};
-use rp2040_hal::fugit::MillisDurationU32;
 use usb_device::LangID;
 use usb_device::bus::UsbBusAllocator;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 use usb_device::prelude::StringDescriptors;
-use usbd_human_interface_device::interface::{InBytes16, InterfaceBuilder, InterfaceConfig, OutNone, ReportSingle};
-use usbd_human_interface_device::usb_class::UsbHidClassBuilder;
 
 static timer_triggered: AtomicBool = AtomicBool::new(false);
 
@@ -65,52 +62,6 @@ pub extern "C" fn send_input_report(illuminance: u16, sensor_event: SensorEvent)
     unsafe {
         tud_hid_report_rs(HIDReportID::Input, &data as *const u32 as *const c_void, 3);
     }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn send_feature_report(sensor_state: &mut SensorState) {
-    unsafe {
-        if !tud_hid_ready_rs() {
-            return;
-        }
-
-        // Pack: reporting_state(2) + power_state(3) + report_interval(12) + padding(7)
-        let data: u32 = (sensor_state.reporting_state as u32 & 0x3)
-            | ((sensor_state.power_state as u32 & 0x7) << 2)
-            | ((sensor_state.report_interval as u32 & 0xFFF) << 5);
-
-        tud_hid_report_rs(HIDReportID::Feature, data as *const u32 as *const c_void, 3);
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn decode_feature_report(sensor_state: &mut SensorState, report: &[u8; 3]) -> bool {
-    let data: u32 = (report[0] as u32) | ((report[1] as u32) << 8) | ((report[2] as u32) << 16);
-
-    let mut changed: bool = false;
-
-    let received_reporting = ReportingState::from((data & 0x3) as u8);
-    let received_power = PowerState::from(((data >> 2) & 0x7) as u8);
-    let received_interval: u16 = ((data >> 5) & 0xFFF) as u16;
-
-    if received_reporting != ReportingState::Invalid
-        && received_reporting != sensor_state.reporting_state
-    {
-        sensor_state.reporting_state = received_reporting;
-        changed = true;
-    }
-
-    if received_power != PowerState::Invalid && received_power != sensor_state.power_state {
-        sensor_state.power_state = received_power;
-        changed = true;
-    }
-
-    if received_interval != 0 && received_interval != sensor_state.report_interval {
-        sensor_state.report_interval = received_interval;
-        changed = true;
-    }
-
-    changed
 }
 
 fn sensor_task(
@@ -254,7 +205,7 @@ unsafe fn main() -> ! {
     gpio_init_pins(pins.gpio27, pins.gpio28);
 
     // Initialize USB
-    let usb_bus = UsbBusAllocator::new(UsbBus::new(
+    let usb_allocator = UsbBusAllocator::new(UsbBus::new(
         pac.USBCTRL_REGS,
         pac.USBCTRL_DPRAM,
         clocks.usb_clock,
@@ -262,21 +213,14 @@ unsafe fn main() -> ! {
         &mut pac.RESETS,
     ));
 
-    // TODO: this is probably super wrong
-    let hid_config: InterfaceConfig<'_, InBytes16, OutNone, ReportSingle> = InterfaceBuilder::with_static_descriptor(&desc_configuration)
-        .unwrap()
-        .idle_default(MillisDurationU32::millis(0))
-        .unwrap()
-        .build();
+    let mut hid = usbd_hid::hid_class::HIDClass::new_ep_in(&usb_allocator, &desc_configuration, 10);
 
-    let mut hid = UsbHidClassBuilder::new()
-        .add_device(hid_config)
-        .build(&usb_bus);
-
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1209, 0x0001))
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001))
         .strings(&[StringDescriptors::new(LangID::EN)
             .manufacturer("Raspberry Pi")
-            .product("RP2040 ALS HID Sensor")])
+            .product("RP2040 ALS HID Sensor")
+            // TODO: .serial_number()
+        ])
         .unwrap()
         .device_class(0x00)
         .build();
@@ -285,26 +229,37 @@ unsafe fn main() -> ! {
         adc_init_sensor(pins.gpio26);
     let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
 
-    // Send initial reports to prime the USB buffers
-    send_feature_report(&mut sensor_state);
+
+
+    let mut feature_buffer = [0u8; 3];
+
     sensor_state.illuminance = read_illuminance(&mut adc, &mut adc_pin_0);
     send_input_report(sensor_state.illuminance, SensorEvent::default());
 
     // ReSharper disable once CppDFAEndlessLoop
     loop {
         if !usb_dev.poll(&mut [&mut hid]) {
+            sensor_task(&mut sensor_state, &mut adc, &mut adc_pin_0);
+            delay.delay_ms(1);
             continue;
         }
 
-        // USB events happened! You can check if there's data to read
-        let mut buf = [0u8; 64];
-        if let Ok(count) = hid.device().read_report(&mut buf) {
-            // Do something with the data
+        // TODO: check data from Host to determine when to send feature report
+        // Host -> RPi
+        if let Ok(_) = hid.pull_raw_report(&mut feature_buffer[..3]) {
+            sensor_state.decode_feature_report(&feature_buffer);
         }
 
-        sensor_task(&mut sensor_state, &mut adc, &mut adc_pin_0);
+        if sensor_state.feature_report_updated {
+            sensor_state.encode_feature_report(&mut feature_buffer);
+            if let Ok(_) = hid.push_raw_input(&feature_buffer[..3]) {
+                sensor_state.feature_report_updated = false;
+            }
+        }
 
-        // Small delay to prevent overwhelming the system
+        // RPi -> Host
+        let _ = hid.push_input(&sensor_state);
+
         delay.delay_ms(1);
     }
 }
