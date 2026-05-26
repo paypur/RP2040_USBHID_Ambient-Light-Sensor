@@ -1,4 +1,5 @@
 #[repr(C)]
+#[derive(Default)]
 pub struct SensorState {
     pub power_state: PowerState,
     pub reporting_state: ReportingState,
@@ -6,10 +7,23 @@ pub struct SensorState {
     pub illuminance: u16,     // 0-65535 lux
     pub last_report_time: u64,
     pub feature_report_updated: bool,
+
 }
 
+impl SensorState {
+    pub const fn new() -> Self {
+        SensorState {
+            power_state: PowerState::Off,
+            reporting_state: ReportingState::NoEvents,
+            report_interval: 0,
+            illuminance: 0,
+            last_report_time: 0,
+            feature_report_updated: false,
+        }
+    }
+}
 // Power States
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 #[repr(C)]
 pub enum PowerState {
     Invalid = 0,
@@ -18,16 +32,44 @@ pub enum PowerState {
     Low = 3,     // D1
     Standby = 4, // D2
     Sleep = 5,   // D3
+    #[default]
     Off = 6,     // D4
 }
 
+impl From<u8> for PowerState {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Invalid,
+            1 => Self::Undefined,
+            2 => Self::Full,
+            3 => Self::Low,
+            4 => Self::Standby,
+            5 => Self::Sleep,
+            6 => Self::Off,
+            _ => Self::default()
+        }
+    }
+}
+
 // Reporting States
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 #[repr(C)]
 pub enum ReportingState {
     Invalid = 0,
+    #[default]
     NoEvents = 1,
     AllEvents = 2,
+}
+
+impl From<u8> for ReportingState {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Invalid,
+            1 => Self::NoEvents,
+            2 => Self::AllEvents,
+            _ => Self::default()
+        }
+    }
 }
 
 // Sensor Events

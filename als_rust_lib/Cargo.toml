@@ -3,6 +3,9 @@ name = "als_rust_lib"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-crate-type = ["staticlib"]
-test = false
+[dependencies]
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+rp2040-hal = "0.12.0"
+usb-device = "0.3.2"
+usbd-human-interface-device = "0.6.0"
