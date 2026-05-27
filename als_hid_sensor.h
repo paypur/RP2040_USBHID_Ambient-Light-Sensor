@@ -64,7 +64,7 @@ void adc_init_sensor(void);
 uint16_t read_illuminance(void);
 void send_input_report(uint16_t illuminance, sensor_event_t event);
 void send_feature_report();
-bool decode_feature_report(const uint8_t *report);
+bool decode_feature_report(const uint8_t *report, sensor_state_t *state);
 bool timer_callback(repeating_timer_t *rt);
 void sensor_task(void);
 

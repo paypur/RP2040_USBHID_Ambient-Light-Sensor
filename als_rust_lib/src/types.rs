@@ -1,4 +1,14 @@
+use core::sync::atomic::Ordering;
+use rp2040_hal::Adc;
+use rp2040_hal::adc::AdcPin;
+use rp2040_hal::fugit::MicrosDurationU32;
+use rp2040_hal::gpio::bank0::Gpio26;
+use rp2040_hal::gpio::{FunctionSio, Pin, PullNone, SioInput};
+use rp2040_hal::timer::Alarm;
+use rp2040_hal::usb::UsbBus;
 use usbd_hid::descriptor::{AsInputReport, BufferOverflow};
+use usbd_hid::hid_class::HIDClass;
+use crate::{ALARM, ALARM_TRIGGERED};
 
 #[repr(C)]
 #[derive(Default)]
@@ -12,54 +22,100 @@ pub struct SensorState {
 }
 
 impl SensorState {
+    pub fn send_input_report(
+        &mut self,
+        // report_timer: &RepeatingTimer,
+        hid: &HIDClass<UsbBus>
+    ) {
+        /*        // Handle feature report updates
+                if self.feature_report_updated {
+                    self.feature_report_updated = false;
+
+                    // self.send_feature_report(hid)
+                }
+        */
+
+        // Handle periodic reporting
+        if ALARM_TRIGGERED.load(Ordering::Relaxed) {
+            ALARM_TRIGGERED.store(false, Ordering::Relaxed);
+
+            // reset alarm
+            critical_section::with(|cs| {
+                if let Some(ref mut alarm) = *ALARM.borrow(cs).borrow_mut() {
+                    let _ = alarm.schedule(MicrosDurationU32::millis(self.report_interval as u32));
+                }
+            });
+
+            if self.reporting_state == ReportingState::AllEvents && self.power_state == PowerState::Full {
+                let _ = hid.push_input(self);
+            }
+        }
+
+        /*      TODO: not really sure why we should be sending input reports more often when not in full power state
+                // Handle state transitions and edge cases
+                if self.reporting_state == ReportingState::AllEvents && self.power_state != PowerState::Full {
+                    self.power_state = PowerState::Full;
+                    // self.send_feature_report(hid);
+
+                    self.read_illuminance(adc, adc_pin);
+                    let _ = hid.push_input(self);
+                }*/
+    }
+
+    pub fn read_illuminance(
+        &mut self,
+        adc: &mut Adc,
+        adc_pin: &mut AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>,
+    ) {
+        let adc_value: u16 = adc.read(adc_pin).unwrap();
+        // Scale using y = 0.6294*x - 117.47, clamp to uint16_t range
+        let mut y: u32 = (adc_value as u32) * 1611u32 / 10000u32;
+        y = y.min(u16::MAX as u32);
+        self.illuminance = y as u16
+    }
+
+    // pub fn send_feature_report(&mut self, hid: &HIDClass<UsbBus>) {
+    //     let mut buffer = [0u8; 3];
+    //     self.encode_feature_report(&mut buffer);
+    //     TODO: I don't think im supposed send feature reports with this function
+    //     if let Ok(_) = hid.push_raw_input(&buffer[..3]) {
+    //         self.feature_report_updated = false;
+    //     }
+    // }
+
     pub fn encode_feature_report(&self, report: &mut [u8; 3]) {
         let data = (self.reporting_state as u32 & 0x3) | (self.power_state as u32 & 0x7 << 2) | (self.report_interval as u32 & 0xFFF << 5);
 
         report[0] = (data as u8) & 0xFF;
-        report[1] = (data as u8) >> 8 & 0xFF;
-        report[2] = (data as u8) >> 16 & 0xFF;
+        report[1] = (data >> 8) as u8 & 0xFF;
+        report[2] = (data >> 16) as u8 & 0xFF;
     }
-    
+
     pub fn decode_feature_report(&mut self, report: &[u8; 3]) {
         let data: u32 = (report[0] as u32) | ((report[1] as u32) << 8) | ((report[2] as u32) << 16);
-    
+
         let mut changed: bool = false;
-    
+
         let received_reporting = ReportingState::from((data & 0x3) as u8);
         let received_power = PowerState::from(((data >> 2) & 0x7) as u8);
         let received_interval: u16 = ((data >> 5) & 0xFFF) as u16;
-    
-        if received_reporting != ReportingState::Invalid 
-        && received_reporting != self.reporting_state {
+
+        if received_reporting != ReportingState::Invalid && received_reporting != self.reporting_state {
             self.reporting_state = received_reporting;
             changed = true;
         }
-    
+
         if received_power != PowerState::Invalid && received_power != self.power_state {
             self.power_state = received_power;
             changed = true;
         }
-    
+
         if received_interval != 0 && received_interval != self.report_interval {
             self.report_interval = received_interval;
             changed = true;
         }
-    
+
         self.feature_report_updated = changed;
-    }
-}
-
-
-impl SensorState {
-    pub const fn new() -> Self {
-        SensorState {
-            power_state: PowerState::Off,
-            reporting_state: ReportingState::NoEvents,
-            report_interval: 0,
-            illuminance: 0,
-            last_report_time: 0,
-            feature_report_updated: false,
-        }
     }
 }
 
@@ -137,25 +193,4 @@ pub enum SensorEvent {
     DataUpdated = 4,
     PollResponse = 5,
     Sensitivity = 6,
-}
-
-#[repr(u8)]
-#[derive(PartialEq)]
-pub enum HIDReportID {
-    Input = 1, // Input report (illuminance data)
-    Feature,   // Feature report (settings)
-}
-
-#[repr(C)]
-#[derive(PartialEq)]
-pub enum HIDReportType {
-    Invalid = 0,
-    Input,
-    Output,
-    Feature,
-}
-
-#[repr(C)]
-pub struct RepeatingTimer {
-    _unused: [u8; 0],
 }
