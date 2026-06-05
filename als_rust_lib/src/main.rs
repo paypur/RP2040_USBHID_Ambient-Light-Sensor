@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
 
 mod types;
@@ -203,7 +203,7 @@ unsafe fn main() -> ! {
 
     sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
     // RPi -> Host
-    let _ = hid.push_input(&sensor_state);
+    // let _ = hid.push_input(&sensor_state);
 
     // ReSharper disable once CppDFAEndlessLoop
     loop {

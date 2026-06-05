@@ -16,7 +16,7 @@ pub struct SensorState {
     pub power_state: PowerState,
     pub reporting_state: ReportingState,
     pub report_interval: u16, // in milliseconds
-    pub illuminance: u16,     // 0-65535 lux
+    pub illuminance: U16SMA,     // 0-65535 lux
     pub last_report_time: u64,
     pub feature_report_updated: bool,
 }
@@ -71,7 +71,7 @@ impl SensorState {
         // Scale using y = 0.6294*x - 117.47, clamp to uint16_t range
         let mut y: u32 = (adc_value as u32) * 1611u32 / 10000u32;
         y = y.min(u16::MAX as u32);
-        self.illuminance = y as u16
+        self.illuminance.sample(y as u16);
     }
 
     // pub fn send_feature_report(&mut self, hid: &HIDClass<UsbBus>) {
@@ -121,7 +121,7 @@ impl SensorState {
 
 impl AsInputReport for SensorState {
     fn serialize(&self, buffer: &mut [u8]) -> Result<usize, BufferOverflow> {
-        let data: u32 = self.illuminance as u32 | ((SensorEvent::default() as u32) << 16);
+        let data: u32 = self.illuminance.value() | ((SensorEvent::default() as u32) << 16);
 
         buffer[0] = (data & 0xFF) as u8; // Illuminance bits 0-7
         buffer[1] = ((data >> 8) & 0xFF) as u8; // Illuminance bits 8-15
@@ -193,4 +193,50 @@ pub enum SensorEvent {
     DataUpdated = 4,
     PollResponse = 5,
     Sensitivity = 6,
+}
+
+// 256 sample u16 Simple Moving Average
+pub struct U16SMA {
+    value: f32,
+    index: u8,
+    array: [u16; 256],
+}
+
+impl U16SMA {
+    fn sample(&mut self, value: u16) {
+        let old = self.array[self.index as usize];
+        if old != 0 { self.value -= (value as f32) / 256f32 };
+
+        self.array[self.index as usize] = value;
+        self.value += (value as f32) / 256f32;
+
+        self.index += 1;
+    }
+
+    fn value(&self) -> u32 {
+        self.value as u32
+    }
+}
+
+impl Default for U16SMA {
+    fn default() -> Self {
+        Self {
+            value: 0.0,
+            index: 0,
+            array: [0; 256]
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::assert_eq;
+
+    #[test]
+    fn test_add() {
+        let mut sma = U16SMA::default();
+        sma.sample(10);
+        assert_eq!(sma.value(), 10);
+    }
 }
