@@ -1,13 +1,15 @@
+use crate::Option::Some;
 use core::sync::atomic::Ordering;
-use rp2040_hal::Adc;
-use rp2040_hal::adc::AdcPin;
-use rp2040_hal::fugit::MicrosDurationU32;
-use rp2040_hal::gpio::bank0::Gpio26;
-use rp2040_hal::gpio::{FunctionSio, Pin, PullNone, SioInput};
-use rp2040_hal::timer::Alarm;
-use rp2040_hal::usb::UsbBus;
+use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use usbd_hid::descriptor::{AsInputReport, BufferOverflow};
 use usbd_hid::hid_class::HIDClass;
+use waveshare_rp2040_zero::hal::Adc;
+use waveshare_rp2040_zero::hal::adc::AdcPin;
+use waveshare_rp2040_zero::hal::fugit::MicrosDurationU32;
+use waveshare_rp2040_zero::hal::gpio::bank0::Gpio26;
+use waveshare_rp2040_zero::hal::gpio::{FunctionSio, Pin, PullNone, SioInput};
+use waveshare_rp2040_zero::hal::timer::Alarm;
+use waveshare_rp2040_zero::hal::usb::UsbBus;
 use crate::{ALARM, ALARM_TRIGGERED};
 
 #[repr(C)]

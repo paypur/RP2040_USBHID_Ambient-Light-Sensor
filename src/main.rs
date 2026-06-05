@@ -3,24 +3,31 @@
 
 mod types;
 
+use crate::Option::Some;
+use crate::Option::None;
+use core::option::Option;
 use core::cell::RefCell;
-use crate::types::*;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::delay::Delay;
 use critical_section::Mutex;
-use rp2040_hal::adc::AdcPin;
-use rp2040_hal::gpio::bank0::{Gpio26, Gpio27, Gpio28};
-use rp2040_hal::gpio::{FunctionNull, FunctionSio, Pin, PinState, PullDown, PullNone, SioInput};
-use rp2040_hal::usb::UsbBus;
-use rp2040_hal::{Adc, Clock, Sio, Watchdog, clocks, entry, gpio, Timer};
-use rp2040_hal::pac::{interrupt, CorePeripherals, Peripherals};
-use rp2040_hal::timer::{Alarm, Alarm0};
+use embedded_hal::delay::DelayNs;
+use embedded_hal::digital::{OutputPin, PinState, StatefulOutputPin};
+use ws2812_pio::Ws2812;
 use usb_device::LangID;
 use usb_device::bus::UsbBusAllocator;
 use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 use usb_device::prelude::StringDescriptors;
 use usbd_hid::hid_class::HIDClass;
+use waveshare_rp2040_zero::hal::pio::PIOExt;
+use waveshare_rp2040_zero::{entry, XOSC_CRYSTAL_FREQ};
+use waveshare_rp2040_zero::hal::{clocks, gpio, Clock, Sio, Timer, Watchdog};
+use waveshare_rp2040_zero::hal::gpio::{FunctionNull, FunctionPio0, FunctionSio, Pin, PullDown, PullNone, SioInput};
+use waveshare_rp2040_zero::pac::{interrupt, CorePeripherals, Peripherals};
+use smart_leds_trait::{SmartLedsWrite, RGB8};
+use waveshare_rp2040_zero::hal::adc::AdcPin;
+use waveshare_rp2040_zero::hal::gpio::bank0::{Gpio26, Gpio27, Gpio28};
+use waveshare_rp2040_zero::hal::timer::{Alarm, Alarm0};
 
 static ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
 static ALARM_TRIGGERED: AtomicBool = AtomicBool::new(false);
@@ -117,7 +124,6 @@ const DESC_HID_REPORT: [u8; 108] = [
 ];
 // @formatter:on
 
-const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 fn gpio_init_pins(
     pin27: Pin<Gpio27, FunctionNull, PullDown>,
@@ -146,7 +152,7 @@ unsafe fn TIMER_IRQ_0() {
 
 #[entry]
 unsafe fn main() -> ! {
-    let mut sensor_state: SensorState = SensorState::default();
+    // let mut sensor_state: SensorState = SensorState::default();
     // let mut report_timer: RepeatingTimer = unsafe { transmute(0) };
 
     /* Initialize hardware */
@@ -156,7 +162,7 @@ unsafe fn main() -> ! {
     /* Clock config */
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     let clocks = clocks::init_clocks_and_plls(
-        XTAL_FREQ_HZ,
+        XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -167,10 +173,10 @@ unsafe fn main() -> ! {
 
     /* Timing config */
     let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-    let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-    let mut alarm = timer.alarm_0().unwrap();
-    alarm.enable_interrupt();
-    critical_section::with(|cs| ALARM.borrow(cs).replace(Some(alarm)));
+    let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+    // let mut alarm = timer.alarm_0().unwrap();
+    // alarm.enable_interrupt();
+    // critical_section::with(|cs| ALARM.borrow(cs).replace(Some(alarm)));
 
     let sio = Sio::new(pac.SIO);
     let pins = gpio::Pins::new(
@@ -179,49 +185,85 @@ unsafe fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    gpio_init_pins(pins.gpio27, pins.gpio28);
+    // gpio_init_pins(pins.gpio27, pins.gpio28);
 
-    // Initialize USB
-    let usb_allocator = UsbBusAllocator::new(UsbBus::new(
-        pac.USBCTRL_REGS,
-        pac.USBCTRL_DPRAM,
-        clocks.usb_clock,
-        true,
-        &mut pac.RESETS,
-    ));
+    let led = pins.gpio16.into_function::<FunctionPio0>();
 
-    let mut hid = HIDClass::new(&usb_allocator, &DESC_HID_REPORT, 10);
+    let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
+    let mut ws2812 = Ws2812::new(
+        led,
+        &mut pio,
+        sm0,
+        clocks.peripheral_clock.freq(),
+        timer.count_down(),
+    );
 
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001)).strings(&[
-        StringDescriptors::new(LangID::EN).manufacturer("Raspberry Pi").product("RP2040 ALS HID Sensor"), // TODO: .serial_number()
-    ]).unwrap().device_class(0x00).build();
+    let mut hue: u8 = 0;
 
-    let mut adc_pin_0: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> = adc_init_sensor(pins.gpio26);
-    let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
-
-    let mut feature_buffer = [0u8; 3];
-
-    sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
-    // RPi -> Host
-    // let _ = hid.push_input(&sensor_state);
-
-    // ReSharper disable once CppDFAEndlessLoop
     loop {
-        if !usb_dev.poll(&mut [&mut hid]) {
-            sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
-            delay.delay_ms(1);
-            continue;
-        }
+        let color = hue_to_rgb(hue);
+        ws2812.write(core::iter::once(color)).unwrap();
+        hue = hue.wrapping_add(1);
+        delay.delay_ms(10);
+    }
 
-        // Host -> RPi
-        if let Ok(_info) = hid.pull_raw_report(&mut feature_buffer[..3]) {
-            sensor_state.decode_feature_report(&feature_buffer);
-        }
+    // // Initialize USB
+    // let usb_allocator = UsbBusAllocator::new(UsbBus::new(
+    //     pac.USBCTRL_REGS,
+    //     pac.USBCTRL_DPRAM,
+    //     clocks.usb_clock,
+    //     true,
+    //     &mut pac.RESETS,
+    // ));
+    //
+    // let mut hid = HIDClass::new(&usb_allocator, &DESC_HID_REPORT, 10);
+    //
+    // let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001)).strings(&[
+    //     StringDescriptors::new(LangID::EN).manufacturer("Raspberry Pi").product("RP2040 ALS HID Sensor"), // TODO: .serial_number()
+    // ]).unwrap().device_class(0x00).build();
+    //
+    // let mut adc_pin_0: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> = adc_init_sensor(pins.gpio26);
+    // let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
+    //
+    // let mut feature_buffer = [0u8; 3];
+    //
+    // sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
+    // // RPi -> Host
+    // // let _ = hid.push_input(&sensor_state);
+    //
+    // // ReSharper disable once CppDFAEndlessLoop
+    // loop {
+    //     if !usb_dev.poll(&mut [&mut hid]) {
+    //         sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
+    //         delay.delay_ms(1);
+    //         continue;
+    //     }
+    //
+    //     // Host -> RPi
+    //     if let Ok(_info) = hid.pull_raw_report(&mut feature_buffer[..3]) {
+    //         sensor_state.decode_feature_report(&feature_buffer);
+    //     }
+    //
+    //     sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
+    //     sensor_state.send_input_report(&hid);
+    //
+    //     delay.delay_ms(1);
+    // }
+}
 
-        sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
-        sensor_state.send_input_report(&hid);
+fn hue_to_rgb(hue: u8) -> RGB8 {
+    let sector = hue / 43;
+    let r = hue % 43;
+    let m = (r as u32 * 255 / 43) as u8;
+    let n = 255 - m;
 
-        delay.delay_ms(1);
+    match sector {
+        0 => RGB8 { r: 255, g: m, b: 0 },
+        1 => RGB8 { r: n, g: 255, b: 0 },
+        2 => RGB8 { r: 0, g: 255, b: m },
+        3 => RGB8 { r: 0, g: n, b: 255 },
+        4 => RGB8 { r: m, g: 0, b: 255 },
+        _ => RGB8 { r: 255, g: 0, b: n },
     }
 }
 

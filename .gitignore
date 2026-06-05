@@ -39,9 +39,9 @@ __pycache__/
 # Pico SDK (if cloned locally)
 pico-sdk/
 
-
 # Added by cargo
 */target
+target/
 
 # jetbrains stuff
 .idea
