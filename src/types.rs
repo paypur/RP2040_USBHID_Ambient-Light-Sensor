@@ -1,6 +1,12 @@
+use core::default::Default;
+use core::convert::From;
+use core::result::Result::Ok;
+use core::result::Result;
+use core::ops::{Deref, DerefMut};
 use crate::Option::Some;
 use core::sync::atomic::Ordering;
-use cortex_m::prelude::_embedded_hal_adc_OneShot;
+use usb_device::class::{ControlIn, UsbClass};
+use usb_device::control;
 use usbd_hid::descriptor::{AsInputReport, BufferOverflow};
 use usbd_hid::hid_class::HIDClass;
 use waveshare_rp2040_zero::hal::Adc;
@@ -14,7 +20,7 @@ use crate::{ALARM, ALARM_TRIGGERED};
 
 #[repr(C)]
 #[derive(Default)]
-pub struct SensorState {
+pub struct LightSensor {
     pub power_state: PowerState,
     pub reporting_state: ReportingState,
     pub report_interval: u16, // in milliseconds
@@ -23,7 +29,7 @@ pub struct SensorState {
     pub feature_report_updated: bool,
 }
 
-impl SensorState {
+impl LightSensor {
     pub fn send_input_report(
         &mut self,
         // report_timer: &RepeatingTimer,
@@ -76,15 +82,6 @@ impl SensorState {
         self.illuminance.sample(y as u16);
     }
 
-    // pub fn send_feature_report(&mut self, hid: &HIDClass<UsbBus>) {
-    //     let mut buffer = [0u8; 3];
-    //     self.encode_feature_report(&mut buffer);
-    //     TODO: I don't think im supposed send feature reports with this function
-    //     if let Ok(_) = hid.push_raw_input(&buffer[..3]) {
-    //         self.feature_report_updated = false;
-    //     }
-    // }
-
     pub fn encode_feature_report(&self, report: &mut [u8; 3]) {
         let data = (self.reporting_state as u32 & 0x3) | (self.power_state as u32 & 0x7 << 2) | (self.report_interval as u32 & 0xFFF << 5);
 
@@ -93,7 +90,7 @@ impl SensorState {
         report[2] = (data >> 16) as u8 & 0xFF;
     }
 
-    pub fn decode_feature_report(&mut self, report: &[u8; 3]) {
+    pub fn decode_feature_report(&mut self, report: &[u8]) {
         let data: u32 = (report[0] as u32) | ((report[1] as u32) << 8) | ((report[2] as u32) << 16);
 
         let mut changed: bool = false;
@@ -121,7 +118,7 @@ impl SensorState {
     }
 }
 
-impl AsInputReport for SensorState {
+impl AsInputReport for LightSensor {
     fn serialize(&self, buffer: &mut [u8]) -> Result<usize, BufferOverflow> {
         let data: u32 = self.illuminance.value() | ((SensorEvent::default() as u32) << 16);
 
@@ -130,6 +127,53 @@ impl AsInputReport for SensorState {
         buffer[2] = ((data >> 16) & 0xFF) as u8; // Event bits + padding
 
         Ok(3)
+    }
+}
+
+pub struct UsbLightSensor<> {
+    sensor: LightSensor,
+}
+
+impl UsbLightSensor {
+    pub fn new() -> Self {
+        Self {
+            sensor: LightSensor::default(),
+        }
+    }
+}
+
+impl Deref for UsbLightSensor {
+    type Target = LightSensor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sensor
+    }
+}
+
+impl DerefMut for UsbLightSensor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.sensor
+    }
+}
+
+impl<B: usb_device::bus::UsbBus> usb_device::class::UsbClass<B> for UsbLightSensor {
+    fn control_in(&mut self, xfer: ControlIn<B>) {
+        let req = xfer.request();
+
+        // Is it an HID Class request targeting an Interface?
+        if req.request_type == control::RequestType::Class && req.request == 0x01 { // 1 = GET_REPORT
+            let report_type = (req.value >> 8) as u8;
+            let report_id = (req.value & 0xFF) as u8;
+
+            if report_type == 3 && report_id == 2 {
+                let mut feature: [u8; 4] = [2, 0, 0, 0];
+
+                self.sensor.encode_feature_report((&mut feature[1..4]).try_into().unwrap());
+
+                xfer.accept_with(&feature).ok();
+            }
+        }
+        // do nothing for other requests
     }
 }
 
@@ -212,7 +256,7 @@ impl U16SMA {
         self.array[self.index as usize] = value;
         self.value += (value as f32) / 256f32;
 
-        self.index += 1;
+        self.index = self.index.wrapping_add(1);
     }
 
     fn value(&self) -> u32 {
