@@ -1,25 +1,24 @@
-use core::default::Default;
-use core::convert::From;
-use core::result::Result::Ok;
-use core::result::Result;
-use core::ops::{Deref, DerefMut};
 use crate::Option::Some;
+use crate::{ALARM, IS_ALARM_TRIGGERED};
+use core::convert::From;
+use core::default::Default;
+use core::ops::{Deref, DerefMut};
+use core::result::Result;
+use core::result::Result::Ok;
 use core::sync::atomic::Ordering;
 use usb_device::class::{ControlIn, UsbClass};
 use usb_device::control;
 use usbd_hid::descriptor::{AsInputReport, BufferOverflow};
 use usbd_hid::hid_class::HIDClass;
-use waveshare_rp2040_zero::hal::Adc;
 use waveshare_rp2040_zero::hal::adc::AdcPin;
 use waveshare_rp2040_zero::hal::fugit::MicrosDurationU32;
 use waveshare_rp2040_zero::hal::gpio::bank0::Gpio26;
 use waveshare_rp2040_zero::hal::gpio::{FunctionSio, Pin, PullNone, SioInput};
 use waveshare_rp2040_zero::hal::timer::Alarm;
 use waveshare_rp2040_zero::hal::usb::UsbBus;
-use crate::{ALARM, ALARM_TRIGGERED};
+use waveshare_rp2040_zero::hal::Adc;
 
 #[repr(C)]
-#[derive(Default)]
 pub struct LightSensor {
     pub power_state: PowerState,
     pub reporting_state: ReportingState,
@@ -30,6 +29,17 @@ pub struct LightSensor {
 }
 
 impl LightSensor {
+    pub fn new() -> Self {
+        Self {
+            power_state: PowerState::default(),
+            reporting_state: ReportingState::default(),
+            report_interval: 10,
+            illuminance: U16SMA::default(),
+            last_report_time: 0,
+            feature_report_updated: false,
+        }
+    }
+
     pub fn send_input_report(
         &mut self,
         // report_timer: &RepeatingTimer,
@@ -44,9 +54,7 @@ impl LightSensor {
         */
 
         // Handle periodic reporting
-        if ALARM_TRIGGERED.load(Ordering::Relaxed) {
-            ALARM_TRIGGERED.store(false, Ordering::Relaxed);
-
+        if IS_ALARM_TRIGGERED.load(Ordering::Relaxed) {
             // reset alarm
             critical_section::with(|cs| {
                 if let Some(ref mut alarm) = *ALARM.borrow(cs).borrow_mut() {
@@ -54,9 +62,13 @@ impl LightSensor {
                 }
             });
 
-            if self.reporting_state == ReportingState::AllEvents && self.power_state == PowerState::Full {
+            // let _ = serial.write(b"reported\r\n");
+
+            // if self.reporting_state == ReportingState::AllEvents && self.power_state == PowerState::Full {
                 let _ = hid.push_input(self);
-            }
+            // }
+
+            IS_ALARM_TRIGGERED.store(false, Ordering::Relaxed);
         }
 
         /*      TODO: not really sure why we should be sending input reports more often when not in full power state
@@ -122,11 +134,12 @@ impl AsInputReport for LightSensor {
     fn serialize(&self, buffer: &mut [u8]) -> Result<usize, BufferOverflow> {
         let data: u32 = self.illuminance.value() | ((SensorEvent::default() as u32) << 16);
 
-        buffer[0] = (data & 0xFF) as u8; // Illuminance bits 0-7
-        buffer[1] = ((data >> 8) & 0xFF) as u8; // Illuminance bits 8-15
-        buffer[2] = ((data >> 16) & 0xFF) as u8; // Event bits + padding
+        buffer[0] = 1u8; // Report Id
+        buffer[1] = self.illuminance.value() as u8; // Illuminance bits 0-7
+        buffer[2] = (self.illuminance.value() >> 8) as u8; // Illuminance bits 8-15
+        buffer[3] = SensorEvent::default() as u8; // Event bits + padding
 
-        Ok(3)
+        Ok(4)
     }
 }
 
@@ -137,7 +150,7 @@ pub struct UsbLightSensor<> {
 impl UsbLightSensor {
     pub fn new() -> Self {
         Self {
-            sensor: LightSensor::default(),
+            sensor: LightSensor::new(),
         }
     }
 }
