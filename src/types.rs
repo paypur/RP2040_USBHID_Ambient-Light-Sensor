@@ -1,12 +1,14 @@
 use crate::Option::Some;
 use crate::{ALARM, IS_ALARM_TRIGGERED};
+use core::cmp::Ord;
 use core::convert::From;
 use core::default::Default;
 use core::ops::{Deref, DerefMut};
 use core::result::Result;
 use core::result::Result::Ok;
 use core::sync::atomic::Ordering;
-use usb_device::class::{ControlIn, UsbClass};
+use cortex_m::prelude::_embedded_hal_adc_OneShot;
+use usb_device::class::ControlIn;
 use usb_device::control;
 use usbd_hid::descriptor::{AsInputReport, BufferOverflow};
 use usbd_hid::hid_class::HIDClass;
@@ -23,7 +25,7 @@ pub struct LightSensor {
     pub power_state: PowerState,
     pub reporting_state: ReportingState,
     pub report_interval: u16, // in milliseconds
-    pub illuminance: U16SMA,     // 0-65535 lux
+    pub illuminance: IlluminanceSMA,
     pub last_report_time: u64,
     pub feature_report_updated: bool,
 }
@@ -34,17 +36,13 @@ impl LightSensor {
             power_state: PowerState::default(),
             reporting_state: ReportingState::default(),
             report_interval: 10,
-            illuminance: U16SMA::default(),
+            illuminance: IlluminanceSMA::default(),
             last_report_time: 0,
             feature_report_updated: false,
         }
     }
 
-    pub fn send_input_report(
-        &mut self,
-        // report_timer: &RepeatingTimer,
-        hid: &HIDClass<UsbBus>
-    ) {
+    pub fn send_input_report(&mut self, hid: &HIDClass<UsbBus>) {
         /*        // Handle feature report updates
                 if self.feature_report_updated {
                     self.feature_report_updated = false;
@@ -65,7 +63,7 @@ impl LightSensor {
             // let _ = serial.write(b"reported\r\n");
 
             // if self.reporting_state == ReportingState::AllEvents && self.power_state == PowerState::Full {
-                let _ = hid.push_input(self);
+            let _ = hid.push_input(self);
             // }
 
             IS_ALARM_TRIGGERED.store(false, Ordering::Relaxed);
@@ -82,16 +80,13 @@ impl LightSensor {
                 }*/
     }
 
-    pub fn read_illuminance(
+    pub fn sample_illuminance(
         &mut self,
         adc: &mut Adc,
-        adc_pin: &mut AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>,
+        adc_pin: &mut AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>
     ) {
         let adc_value: u16 = adc.read(adc_pin).unwrap();
-        // Scale using y = 0.6294*x - 117.47, clamp to uint16_t range
-        let mut y: u32 = (adc_value as u32) * 1611u32 / 10000u32;
-        y = y.min(u16::MAX as u32);
-        self.illuminance.sample(y as u16);
+        self.illuminance.sample(adc_value);
     }
 
     pub fn encode_feature_report(&self, report: &mut [u8; 3]) {
@@ -132,13 +127,11 @@ impl LightSensor {
 
 impl AsInputReport for LightSensor {
     fn serialize(&self, buffer: &mut [u8]) -> Result<usize, BufferOverflow> {
-        let data: u32 = self.illuminance.value() | ((SensorEvent::default() as u32) << 16);
-
+        let illuminance = self.illuminance.value();
         buffer[0] = 1u8; // Report Id
-        buffer[1] = self.illuminance.value() as u8; // Illuminance bits 0-7
-        buffer[2] = (self.illuminance.value() >> 8) as u8; // Illuminance bits 8-15
+        buffer[1] = illuminance as u8; // Illuminance bits 0-7
+        buffer[2] = (illuminance >> 8) as u8; // Illuminance bits 8-15
         buffer[3] = SensorEvent::default() as u8; // Event bits + padding
-
         Ok(4)
     }
 }
@@ -254,30 +247,39 @@ pub enum SensorEvent {
     Sensitivity = 6,
 }
 
-// 256 sample u16 Simple Moving Average
-pub struct U16SMA {
+pub struct IlluminanceSMA {
     value: f32,
     index: u8,
     array: [u16; 256],
 }
 
-impl U16SMA {
-    fn sample(&mut self, value: u16) {
+impl IlluminanceSMA {
+    // 256 sample Simple Moving Average
+    fn sample(&mut self, raw_adc: u16) {
         let old = self.array[self.index as usize];
-        if old != 0 { self.value -= (value as f32) / 256f32 };
+        if old != 0 { self.value -= (old as f32) / 256f32 };
 
-        self.array[self.index as usize] = value;
-        self.value += (value as f32) / 256f32;
+        self.array[self.index as usize] = raw_adc;
+        self.value += (raw_adc as f32) / 256f32;
 
         self.index = self.index.wrapping_add(1);
     }
 
-    fn value(&self) -> u32 {
-        self.value as u32
+    fn value(&self) -> u16 {
+        // https://github.com/ParthaPRay/TEMT6000
+        let resistor = 10000f32; // 10k ohms
+        let k: f32 = 0.03162;
+        let m: f32 = 1.5;
+
+        let voltage = self.value * 3.3f32 / 4095f32;
+        let current = (voltage / resistor) * 1E6; // micro amps
+        let illuminance = libm::powf(current / k, 1f32 / m);
+
+        (illuminance as u32).clamp(10, 1000) as u16
     }
 }
 
-impl Default for U16SMA {
+impl Default for IlluminanceSMA {
     fn default() -> Self {
         Self {
             value: 0.0,
@@ -294,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let mut sma = U16SMA::default();
+        let mut sma = IlluminanceSMA::default();
         sma.sample(10);
         assert_eq!(sma.value(), 10);
     }

@@ -192,7 +192,6 @@ unsafe fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    // gpio_init_pins(pins.gpio27, pins.gpio28);
 
     let led = pins.gpio16.into_function::<FunctionPio0>();
 
@@ -214,9 +213,8 @@ unsafe fn main() -> ! {
         &mut pac.RESETS,
     ));
 
-    let mut serial = SerialPort::new(&usb_allocator);
-
     let mut hid = HIDClass::new(&usb_allocator, &DESC_HID_REPORT, 10);
+    let mut serial = SerialPort::new(&usb_allocator);
 
     let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001)).strings(&[
         StringDescriptors::new(LangID::EN).manufacturer("Waveshare").product("RP2040 ALS HID Sensor"), // TODO: .serial_number()
@@ -226,15 +224,14 @@ unsafe fn main() -> ! {
       .device_protocol(0x01)  // IAD Protocol
       .build();
 
+    gpio_init_pins(pins.gpio27, pins.gpio28);
+
     let mut adc_pin_0: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> = adc_init_sensor(pins.gpio26);
     let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
 
 
-    let mut feature_buffer = [0u8; 64];
-
-    // sensor_state.read_illuminance(&mut adc, &mut adc_pin_0);
-
     let mut s = false;
+    let mut feature_buffer = [0u8; 64];
 
     // ReSharper disable once CppDFAEndlessLoop
     loop {
@@ -259,9 +256,13 @@ unsafe fn main() -> ! {
             s = flash_led(&mut ws2812, RGB8::new(0, 32, 0), s);
         }
 
-        light_sensor.read_illuminance(&mut adc, &mut adc_pin_0);
+        light_sensor.sample_illuminance(&mut adc, &mut adc_pin_0);
         // RPi -> Host
         light_sensor.send_input_report(&hid);
+
+        // let mut string = heapless::String::<32>::new();
+        // write!(string, "lux: {}\r\n", self.illuminance.value()).unwrap();
+        // let _ = sp.write(string.as_bytes());
 
         delay.delay_ms(1);
     }
