@@ -26,8 +26,6 @@ pub struct LightSensor {
     pub reporting_state: ReportingState,
     pub report_interval: u16, // in milliseconds
     pub illuminance: IlluminanceSMA,
-    pub last_report_time: u64,
-    pub feature_report_updated: bool,
 }
 
 impl LightSensor {
@@ -37,20 +35,10 @@ impl LightSensor {
             reporting_state: ReportingState::default(),
             report_interval: 10,
             illuminance: IlluminanceSMA::default(),
-            last_report_time: 0,
-            feature_report_updated: false,
         }
     }
 
     pub fn send_input_report(&mut self, hid: &HIDClass<UsbBus>) {
-        /*        // Handle feature report updates
-                if self.feature_report_updated {
-                    self.feature_report_updated = false;
-
-                    // self.send_feature_report(hid)
-                }
-        */
-
         // Handle periodic reporting
         if IS_ALARM_TRIGGERED.load(Ordering::Relaxed) {
             // reset alarm
@@ -68,23 +56,9 @@ impl LightSensor {
 
             IS_ALARM_TRIGGERED.store(false, Ordering::Relaxed);
         }
-
-        /*      TODO: not really sure why we should be sending input reports more often when not in full power state
-                // Handle state transitions and edge cases
-                if self.reporting_state == ReportingState::AllEvents && self.power_state != PowerState::Full {
-                    self.power_state = PowerState::Full;
-                    // self.send_feature_report(hid);
-
-                    self.read_illuminance(adc, adc_pin);
-                    let _ = hid.push_input(self);
-                }*/
     }
 
-    pub fn sample_illuminance(
-        &mut self,
-        adc: &mut Adc,
-        adc_pin: &mut AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>
-    ) {
+    pub fn sample_illuminance(&mut self, adc: &mut Adc, adc_pin: &mut AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>) {
         let adc_value: u16 = adc.read(adc_pin).unwrap();
         self.illuminance.sample(adc_value);
     }
@@ -100,28 +74,21 @@ impl LightSensor {
     pub fn decode_feature_report(&mut self, report: &[u8]) {
         let data: u32 = (report[0] as u32) | ((report[1] as u32) << 8) | ((report[2] as u32) << 16);
 
-        let mut changed: bool = false;
-
         let received_reporting = ReportingState::from((data & 0x3) as u8);
         let received_power = PowerState::from(((data >> 2) & 0x7) as u8);
         let received_interval: u16 = ((data >> 5) & 0xFFF) as u16;
 
         if received_reporting != ReportingState::Invalid && received_reporting != self.reporting_state {
             self.reporting_state = received_reporting;
-            changed = true;
         }
 
         if received_power != PowerState::Invalid && received_power != self.power_state {
             self.power_state = received_power;
-            changed = true;
         }
 
         if received_interval != 0 && received_interval != self.report_interval {
             self.report_interval = received_interval;
-            changed = true;
         }
-
-        self.feature_report_updated = changed;
     }
 }
 
@@ -163,10 +130,10 @@ impl DerefMut for UsbLightSensor {
 }
 
 impl<B: usb_device::bus::UsbBus> usb_device::class::UsbClass<B> for UsbLightSensor {
+    // Host -> RPi
     fn control_in(&mut self, xfer: ControlIn<B>) {
         let req = xfer.request();
 
-        // Is it an HID Class request targeting an Interface?
         if req.request_type == control::RequestType::Class && req.request == 0x01 { // 1 = GET_REPORT
             let report_type = (req.value >> 8) as u8;
             let report_id = (req.value & 0xFF) as u8;

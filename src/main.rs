@@ -24,8 +24,8 @@ use usbd_hid::hid_class::{HIDClass, ReportType};
 use usbd_serial::SerialPort;
 use waveshare_rp2040_zero::hal::adc::AdcPin;
 use waveshare_rp2040_zero::hal::fugit::MicrosDuration;
-use waveshare_rp2040_zero::hal::gpio::bank0::{Gpio16, Gpio26, Gpio27, Gpio28};
-use waveshare_rp2040_zero::hal::gpio::{FunctionNull, FunctionPio0, FunctionSio, Pin, PullDown, PullNone, SioInput};
+use waveshare_rp2040_zero::hal::gpio::bank0::{Gpio16, Gpio26};
+use waveshare_rp2040_zero::hal::gpio::{FunctionPio0, FunctionSio, Pin, PullDown, PullNone, SioInput};
 use waveshare_rp2040_zero::hal::pio::{PIOExt, SM0};
 use waveshare_rp2040_zero::hal::timer::{Alarm, Alarm0, CountDown};
 use waveshare_rp2040_zero::hal::usb::UsbBus;
@@ -34,46 +34,6 @@ use waveshare_rp2040_zero::pac::{interrupt, CorePeripherals, Interrupt, Peripher
 use waveshare_rp2040_zero::{entry, XOSC_CRYSTAL_FREQ};
 use ws2812_pio::Ws2812;
 
-static ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
-static IS_ALARM_TRIGGERED: AtomicBool = AtomicBool::new(false);
-
-// TODO: dont think this is needed anymore
-// const DESCRIPTOR_CONFIG: [u8; 34] = [
-//     // Configuration Descriptor
-//     0x09, // bLength
-//     0x02, // bDescriptorType
-//     0x22, 0x00,  // wTotalLength
-//     0x01,  // bNumInterfaces
-//     0x01,  // bConfigurationValue
-//     0x00,  // iConfiguration
-//     0x20, // bmAttributes
-//     0x32, // bMaxPower
-//     // Interface Descriptor
-//     0x09, // bLength
-//     0x04, // bDescriptorType
-//     0x00, // bInterfaceNumber
-//     0x00, // bAlternateSetting
-//     0x01, // bNumEndpoints
-//     0x03, // bInterfaceClass
-//     0x00, // bInterfaceSubClass
-//     0x00, // bInterfaceProtocol (None)
-//     0x00, // iInterface
-//     // HID Descriptor
-//     0x09,  // bLength
-//     0x21, // bDescriptorType
-//     0x11, 0x01, // bcdHID
-//     0x00,    // bCountryCode
-//     0x01,    // bNumDescriptors
-//     0x22,   // bDescriptorType
-//     0x6C, 0x00, // wDescriptorLength
-//     // Endpoint Descriptor
-//     0x07,    // bLength
-//     0x05,    // bDescriptorType
-//     0x81, // bEndpointAddress
-//     0x03,    // bmAttributes
-//     0x40, 0x00, // wMaxPacketSize
-//     0x05, // bInterval
-// ];
 
 // @formatter:off
 const DESC_HID_REPORT: [u8; 108] = [
@@ -129,21 +89,8 @@ const DESC_HID_REPORT: [u8; 108] = [
 ];
 // @formatter:on
 
-
-fn gpio_init_pins(
-    pin27: Pin<Gpio27, FunctionNull, PullDown>,
-    pin28: Pin<Gpio28, FunctionNull, PullDown>,
-) {
-    // Initialize Pin 28 (HIGH) and Pin 27 (LOW) as per spec
-    pin27.into_push_pull_output_in_state(PinState::Low);
-    pin28.into_push_pull_output_in_state(PinState::High);
-}
-
-fn adc_init_sensor(
-    pin26: Pin<Gpio26, FunctionNull, PullDown>,
-) -> AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> {
-    AdcPin::new(pin26.into_floating_input()).unwrap()
-}
+static ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
+static IS_ALARM_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
 #[interrupt]
 unsafe fn TIMER_IRQ_0() {
@@ -159,9 +106,11 @@ unsafe fn TIMER_IRQ_0() {
 unsafe fn main() -> ! {
     let mut light_sensor = UsbLightSensor::new();
 
+
     /* Initialize hardware */
     let mut pac = Peripherals::take().unwrap();
     let core = CorePeripherals::take().unwrap();
+
 
     /* Clock config */
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -175,6 +124,7 @@ unsafe fn main() -> ! {
         &mut watchdog,
     ).unwrap();
 
+
     /* Timing config */
     let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
     let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
@@ -185,6 +135,8 @@ unsafe fn main() -> ! {
     critical_section::with(|cs| ALARM.borrow(cs).replace(Some(alarm)));
     unsafe { NVIC::unmask(Interrupt::TIMER_IRQ_0); }
 
+
+    /* Initialize GPIO */
     let sio = Sio::new(pac.SIO);
     let pins = gpio::Pins::new(
         pac.IO_BANK0,
@@ -193,16 +145,23 @@ unsafe fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let led = pins.gpio16.into_function::<FunctionPio0>();
+    pins.gpio27.into_push_pull_output_in_state(PinState::Low);
+    pins.gpio28.into_push_pull_output_in_state(PinState::High);
+
+    let mut adc_pin_0: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> = AdcPin::new(pins.gpio26.into_floating_input()).unwrap();
+    let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
+
+    let pin_led = pins.gpio16.into_function::<FunctionPio0>();
 
     let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
     let mut ws2812 = Ws2812::new(
-        led,
+        pin_led,
         &mut pio,
         sm0,
         clocks.peripheral_clock.freq(),
         timer.count_down(),
     );
+
 
     /* Initialize USB */
     let usb_allocator = UsbBusAllocator::new(UsbBus::new(
@@ -216,18 +175,16 @@ unsafe fn main() -> ! {
     let mut hid = HIDClass::new(&usb_allocator, &DESC_HID_REPORT, 10);
     let mut serial = SerialPort::new(&usb_allocator);
 
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001)).strings(&[
-        StringDescriptors::new(LangID::EN).manufacturer("Waveshare").product("RP2040 ALS HID Sensor"), // TODO: .serial_number()
-    ]).unwrap()
-      .device_class(0xEF)    // MISCELLANEOUS / Interface Association Descriptor (Required for CDC + HID combo)
-      .device_sub_class(0x02) // Common Class
-      .device_protocol(0x01)  // IAD Protocol
-      .build();
-
-    gpio_init_pins(pins.gpio27, pins.gpio28);
-
-    let mut adc_pin_0: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>> = adc_init_sensor(pins.gpio26);
-    let mut adc = Adc::new(pac.ADC, &mut pac.RESETS);
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_allocator, UsbVidPid(0x1209, 0x0001))
+        .strings(&[StringDescriptors::new(LangID::EN)
+            .manufacturer("Raspberry Pi")
+            .product("RP2040 HID ALS")
+            .serial_number("0")])
+        .unwrap()
+        .device_class(0xEF)    // MISCELLANEOUS / Interface Association Descriptor (Required for CDC + HID combo)
+        .device_sub_class(0x02) // Common Class
+        .device_protocol(0x01)  // IAD Protocol
+        .build();
 
 
     let mut s = false;
@@ -253,7 +210,7 @@ unsafe fn main() -> ! {
         }
 
         if IS_ALARM_TRIGGERED.load(Ordering::Relaxed) {
-            s = flash_led(&mut ws2812, RGB8::new(0, 32, 0), s);
+            s = flash_led(&mut ws2812, s);
         }
 
         light_sensor.sample_illuminance(&mut adc, &mut adc_pin_0);
@@ -268,28 +225,12 @@ unsafe fn main() -> ! {
     }
 }
 
-fn flash_led(led: &mut Ws2812<PIO0, SM0, CountDown, Pin<Gpio16, FunctionPio0, PullDown>>, color: RGB8, s: bool) -> bool {
+fn flash_led(led: &mut Ws2812<PIO0, SM0, CountDown, Pin<Gpio16, FunctionPio0, PullDown>>, s: bool) -> bool {
     match s {
-        true => led.write(core::iter::once(color)).unwrap(),
+        true => led.write(core::iter::once(RGB8::new(0, 32, 0))).unwrap(),
         false => led.write(core::iter::once(RGB8::new(0, 0, 0))).unwrap(),
     }
     !s
-}
-
-fn hue_to_rgb(hue: u8) -> RGB8 {
-    let sector = hue / 43;
-    let r = hue % 43;
-    let m = (r as u32 * 255 / 43) as u8;
-    let n = 255 - m;
-
-    match sector {
-        0 => RGB8 { r: 255, g: m, b: 0 },
-        1 => RGB8 { r: n, g: 255, b: 0 },
-        2 => RGB8 { r: 0, g: 255, b: m },
-        3 => RGB8 { r: 0, g: n, b: 255 },
-        4 => RGB8 { r: m, g: 0, b: 255 },
-        _ => RGB8 { r: 255, g: 0, b: n },
-    }
 }
 
 #[panic_handler]
